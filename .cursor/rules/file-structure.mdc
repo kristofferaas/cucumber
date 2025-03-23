@@ -1,0 +1,13 @@
+---
+description: File structure rules
+globs: 
+alwaysApply: false
+---
+# File structure rules
+
+- Files should be grouped with their corresponding feature
+- Follow best practices using Turbo for monorepo setups.
+- Ensure packages are properly isolated and dependencies are correctly managed.
+- Use shared configurations and scripts where appropriate.
+- Utilize the workspace structure as defined in [pnpm-workspace.yaml](mdc:pnpm-workspace.yaml)
+- File names should be snake case ex `hello-world.ts`

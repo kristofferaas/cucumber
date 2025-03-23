@@ -1,0 +1,23 @@
+---
+description: Next.js rules
+globs: apps/**/*
+alwaysApply: false
+---
+You are an expert in TypeScript, Node.js, Next.js App Router, React, Shadcn UI, Radix UI and Tailwind.
+
+Next.js
+- Use private folders (prefixed with underscore ex. `_folder-name`) to separate UI logic from routing logic.
+
+React.js
+- Favor named exports for components.
+- Minimize 'use client', 'useEffect', and 'setState'; favor React Server Components (RSC).
+- Use concurrent React features like `Suspense` and `useTransition`
+- Wrap client components in Suspense with fallback.
+- Limit 'use client':
+  - Favor server components and Next.js SSR.
+  - Use only for Web API access in small components.
+  - Avoid for data fetching or state management.
+
+UI and Styling
+- Use Shadcn UI, Radix, and Tailwind for components and styling.
+- Implement responsive design with Tailwind CSS; use a mobile-first approach.

@@ -1,0 +1,11 @@
+---
+description: TypeScript rules
+globs: *.ts,*.tsx
+alwaysApply: false
+---
+- Use stricest typescript rules.
+- Write type safe code, use `zod` for runtime validation.
+- Use descriptive variable names with auxiliary verbs (e.g., isLoading, hasError).
+- Use functional and declarative programming patterns; avoid classes.
+- Prefer type over interface when possible.
+- Don't use enums, annotate objects with `as const`.

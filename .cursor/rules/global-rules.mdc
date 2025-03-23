@@ -1,0 +1,7 @@
+---
+description: Global shared rules
+globs: 
+alwaysApply: true
+---
+- Use pnpm as a package manager
+- Use default prettier formatting
