@@ -40,7 +40,11 @@ async function sleep(ms: number): Promise<void> {
  * Fetches messages in batch from Gmail API with rate limiting protection
  * @see https://developers.google.com/gmail/api/guides/batch
  */
-export async function fetchMessages(token: string, user: ClerkUser) {
+export async function fetchMessages(
+  token: string,
+  user: ClerkUser,
+  pageToken?: string
+) {
   // Check if user has necessary permissions
   if (!user) {
     throw new Error("No user found");
@@ -59,15 +63,18 @@ export async function fetchMessages(token: string, user: ClerkUser) {
   // Even though Google recommends max 50, we're using a much smaller number to avoid rate limits
   const BATCH_SIZE = 20;
 
+  // Build request URL with pagination support
+  let url = `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=${BATCH_SIZE}`;
+  if (pageToken) {
+    url += `&pageToken=${pageToken}`;
+  }
+
   // First fetch the message list
-  const listResponse = await fetch(
-    `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=${BATCH_SIZE}`,
-    {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    }
-  );
+  const listResponse = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
 
   // Check for rate limiting on the list request
   if (listResponse.status === 429) {
