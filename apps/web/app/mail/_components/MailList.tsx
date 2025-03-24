@@ -32,7 +32,10 @@ export function MailList({ token }: { token: string }) {
   const rowVirtualizer = useVirtualizer({
     count: hasNextPage ? allMessages.length + 1 : allMessages.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => 80, // Estimated height of each row in pixels
+    estimateSize: () => 48, // Estimated height of each row in pixels
+    gap: 10,
+    paddingStart: 10,
+    paddingEnd: 10,
     overscan: 5,
   });
 
@@ -75,7 +78,7 @@ export function MailList({ token }: { token: string }) {
   }
 
   return (
-    <div ref={parentRef} className="h-[calc(100vh-200px)] overflow-auto">
+    <div ref={parentRef} className="h-[calc(100vh-3rem)] overflow-auto">
       <div
         style={{
           height: `${rowVirtualizer.getTotalSize()}px`,

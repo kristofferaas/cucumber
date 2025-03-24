@@ -17,16 +17,27 @@ const messageListSchema = z.object({
 });
 type MessageList = z.infer<typeof messageListSchema>;
 
-const messageSchema = z.object({
-  historyId: z.string(),
-  id: z.string(),
-  threadId: z.string(),
-  snippet: z.string(),
-  labelIds: z.array(z.string()).optional(),
-  payload: z.unknown(),
-  internalDate: z.string(),
-  sizeEstimate: z.number(),
-});
+const messageSchema = z
+  .object({
+    historyId: z.string(),
+    id: z.string(),
+    threadId: z.string(),
+    snippet: z.string(),
+    labelIds: z.array(z.string()).optional(),
+    payload: z
+      .object({
+        headers: z.array(
+          z.object({
+            name: z.string(),
+            value: z.string(),
+          })
+        ),
+      })
+      .passthrough(),
+    internalDate: z.string(),
+    sizeEstimate: z.number(),
+  })
+  .passthrough();
 export type Message = z.infer<typeof messageSchema>;
 
 /**
@@ -49,6 +60,8 @@ export async function fetchMessages(
   if (!user) {
     throw new Error("No user found");
   }
+
+  await sleep(1000);
 
   const googleAccount = user.externalAccounts.find(
     (ea) => ea.provider === "google"
@@ -103,7 +116,7 @@ export async function fetchMessages(
     return {
       messages: [] as Message[],
       nextPageToken: parsedListData.nextPageToken,
-      totalMessages: 0,
+      totalMessages: parsedListData.resultSizeEstimate,
       fetchedCount: 0,
     };
   }
@@ -168,7 +181,7 @@ export async function fetchMessages(
           return {
             messages: [] as Message[],
             nextPageToken: parsedListData.nextPageToken,
-            totalMessages: parsedListData.messages.length,
+            totalMessages: parsedListData.resultSizeEstimate,
             fetchedCount: 0,
             rateLimited: true,
           };
@@ -243,7 +256,7 @@ export async function fetchMessages(
   return {
     messages,
     nextPageToken: parsedListData.nextPageToken,
-    totalMessages: parsedListData.messages.length,
+    totalMessages: parsedListData.resultSizeEstimate,
     fetchedCount: messages.length,
   };
 }

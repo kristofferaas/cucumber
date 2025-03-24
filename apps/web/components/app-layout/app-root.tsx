@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 const queryClient = new QueryClient();
 
-export function AppShell({ children }: { children: React.ReactNode }) {
+export function AppRoot({ children }: { children: React.ReactNode }) {
   return (
     <ClerkProvider>
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>

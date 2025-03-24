@@ -1,4 +1,4 @@
-import { AppShell } from "@/components/app/app-shell";
+import { AppRoot } from "@/components/app-layout/app-root";
 import { ThemeProvider } from "@/components/theme/theme-provider";
 import {
   SignInButton,
@@ -31,7 +31,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <AppShell>
+    <AppRoot>
       <html lang="en" suppressHydrationWarning>
         <body className={`${geistSans.variable} ${geistMono.variable}`}>
           <ThemeProvider
@@ -40,19 +40,10 @@ export default function RootLayout({
             enableSystem
             disableTransitionOnChange
           >
-            <header className="flex justify-end items-center p-4 gap-4 h-16">
-              <SignedOut>
-                <SignInButton />
-                <SignUpButton />
-              </SignedOut>
-              <SignedIn>
-                <UserButton />
-              </SignedIn>
-            </header>
             {children}
           </ThemeProvider>
         </body>
       </html>
-    </AppShell>
+    </AppRoot>
   );
 }
