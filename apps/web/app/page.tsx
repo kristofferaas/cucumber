@@ -1,4 +1,3 @@
-import { Chat } from "@/components/chat/chat";
 import { currentUser } from "@clerk/nextjs/server";
 
 export default async function Home() {
