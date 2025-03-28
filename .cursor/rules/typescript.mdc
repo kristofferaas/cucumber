@@ -9,3 +9,4 @@ alwaysApply: false
 - Use functional and declarative programming patterns; avoid classes.
 - Prefer type over interface when possible.
 - Don't use enums, annotate objects with `as const`.
+- Prefer `unknown` over `any`
