@@ -1,9 +1,8 @@
 "use client";
 
-import { useSuspenseQuery } from "@tanstack/react-query";
 import { useState, useEffect, useRef } from "react";
-import { fetchFullMessage } from "./fetch-full-message";
 import dynamic from "next/dynamic";
+import type { Message, MessagePart } from "@/lib/gmail/schemas";
 
 const EmailIframe = dynamic(
   () => import("./email-iframe").then((mod) => mod.EmailIframe),
@@ -41,18 +40,9 @@ function decodeBase64Url(base64url: string): string {
   }
 }
 
-type MessagePart = {
-  partId?: string;
-  mimeType: string;
-  filename?: string;
-  headers: { name: string; value: string }[];
-  body: { size: number; data?: string; attachmentId?: string };
-  parts?: MessagePart[];
-};
-
 // Get header value from message part headers
 function getPartHeader(part: MessagePart, name: string): string {
-  const header = part.headers.find(
+  const header = part.headers?.find(
     (h) => h.name.toLowerCase() === name.toLowerCase()
   );
   return header?.value || "";
@@ -149,17 +139,7 @@ function getFilename(part: MessagePart): string {
   return "";
 }
 
-// Debug helper to log message structure
-function logMessageStructure(message: any) {
-  console.log("Message Structure:", JSON.stringify(message, null, 2));
-}
-
-export function FullMessage({ id, token }: { id: string; token: string }) {
-  const { data } = useSuspenseQuery({
-    queryKey: ["message", id],
-    queryFn: () => fetchFullMessage(id, token),
-  });
-
+export function FullMessage({ message }: { message: Message }) {
   const [activeView, setActiveView] = useState<"html" | "plain" | "raw">(
     "html"
   );
@@ -169,11 +149,11 @@ export function FullMessage({ id, token }: { id: string; token: string }) {
   const inlineAttachmentsRef = useRef<Map<string, string>>(new Map());
 
   // Log message structure to help debug
-  console.log("Message payload:", data.payload);
+  console.log("Message payload:", message.payload);
 
   // Get headers
   const getHeader = (name: string): string => {
-    const header = data.payload.headers.find(
+    const header = message.payload?.headers?.find(
       (h) => h.name.toLowerCase() === name.toLowerCase()
     );
     return header?.value || "";
@@ -182,7 +162,7 @@ export function FullMessage({ id, token }: { id: string; token: string }) {
   const subject = getHeader("subject");
   const from = getHeader("from");
   const to = getHeader("to");
-  const date = new Date(parseInt(data.internalDate)).toLocaleString();
+  const date = new Date(parseInt(message.internalDate || "0")).toLocaleString();
 
   // Function to fetch an attachment by ID
   const fetchAttachment = async (
@@ -196,7 +176,7 @@ export function FullMessage({ id, token }: { id: string; token: string }) {
         `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}/attachments/${attachmentId}`,
         {
           headers: {
-            Authorization: `Bearer ${token}`,
+            Authorization: `Bearer ${localStorage.getItem("google_token") || ""}`,
           },
         }
       );
@@ -234,7 +214,7 @@ export function FullMessage({ id, token }: { id: string; token: string }) {
     // First pass: Find the structure of the email
     // This helps us understand if we need to handle multipart/related, multipart/alternative, etc.
     const determineStructure = (
-      root: MessagePart
+      root?: MessagePart
     ): {
       hasRelated: boolean;
       hasAlternative: boolean;
@@ -243,6 +223,8 @@ export function FullMessage({ id, token }: { id: string; token: string }) {
       let hasRelated = false;
       let hasAlternative = false;
       let hasMixed = false;
+
+      if (!root) return { hasRelated, hasAlternative, hasMixed };
 
       if (root.mimeType === "multipart/related") {
         hasRelated = true;
@@ -264,7 +246,7 @@ export function FullMessage({ id, token }: { id: string; token: string }) {
       return { hasRelated, hasAlternative, hasMixed };
     };
 
-    const structure = determineStructure(data.payload);
+    const structure = determineStructure(message.payload);
     console.log("Email structure:", structure);
 
     // Process a multipart/related part according to RFC 2387
@@ -351,7 +333,9 @@ export function FullMessage({ id, token }: { id: string; token: string }) {
     };
 
     // Process any part of the email recursively
-    const processEmailPart = (part: MessagePart): void => {
+    const processEmailPart = (part?: MessagePart): void => {
+      if (!part) return;
+
       console.log(
         `Processing part: ${part.mimeType} (ID: ${part.partId || "none"})`
       );
@@ -425,7 +409,7 @@ export function FullMessage({ id, token }: { id: string; token: string }) {
           );
 
           // Immediately start fetching the attachment (will update the Map later)
-          fetchAttachment(attachmentId, id).then((base64Data) => {
+          fetchAttachment(attachmentId, message.id).then((base64Data) => {
             if (base64Data) {
               // Update the map with the real data
               inlineAttachments.set(
@@ -465,7 +449,7 @@ export function FullMessage({ id, token }: { id: string; token: string }) {
             });
 
             // Fetch the real data
-            fetchAttachment(attachmentId, id).then((base64Data) => {
+            fetchAttachment(attachmentId, message.id).then((base64Data) => {
               if (base64Data) {
                 // Find the attachment and update its data
                 const attachment = attachments.find(
@@ -500,7 +484,7 @@ export function FullMessage({ id, token }: { id: string; token: string }) {
     };
 
     // Start processing from the root
-    processEmailPart(data.payload);
+    processEmailPart(message.payload);
 
     // Log findings
     console.log(`Found HTML content: ${html ? "yes" : "no"}`);
@@ -561,7 +545,6 @@ export function FullMessage({ id, token }: { id: string; token: string }) {
 
       try {
         // Try to normalize domain part if present
-        let normalizedCid = cid;
         const atIndex = cid.indexOf("@");
         const cidWithoutDomain = atIndex > 0 ? cid.substring(0, atIndex) : cid;
 
@@ -785,7 +768,7 @@ export function FullMessage({ id, token }: { id: string; token: string }) {
         ) : (
           <div className="p-4 bg-muted rounded-md overflow-auto max-h-[600px]">
             <code>
-              <pre className="text-xs">{JSON.stringify(data, null, 2)}</pre>
+              <pre className="text-xs">{JSON.stringify(message, null, 2)}</pre>
             </code>
           </div>
         )}

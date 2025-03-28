@@ -17,9 +17,9 @@ export const GMAIL_API_BASE_URL =
 export const GMAIL_BATCH_URL = "https://www.googleapis.com/batch/gmail/v1";
 
 // Types for Gmail API client
-export interface GmailApiClientOptions {
+export type GmailApiClientOptions = {
   accessToken: string;
-}
+};
 
 // Type for batch request body to ensure type safety
 export type BatchRequestBody =
@@ -29,42 +29,108 @@ export type BatchRequestBody =
   | undefined;
 
 // Batch request types
-export interface BatchRequest {
+export type BatchRequest = {
   method: string;
   path: string;
   body?: BatchRequestBody;
   headers?: Record<string, string>;
   id?: string;
-}
+};
 
-export interface BatchResponse<T = unknown> {
+export type BatchResponse<T = unknown> = {
   id: string;
   status: number;
   headers: Record<string, string>;
   body: T;
-}
+};
+
+// Gmail API client return type
+export type GmailApiClient = {
+  getMessages: (params?: {
+    maxResults?: number;
+    labelIds?: string[];
+    q?: string;
+    pageToken?: string;
+  }) => Promise<MessageList>;
+  getMessage: (
+    id: string,
+    format?: "full" | "minimal" | "raw"
+  ) => Promise<Message>;
+  getThreads: (params?: {
+    maxResults?: number;
+    labelIds?: string[];
+    q?: string;
+    pageToken?: string;
+  }) => Promise<ThreadList>;
+  getThread: (
+    id: string,
+    format?: "full" | "minimal" | "raw"
+  ) => Promise<Thread>;
+  getLabels: () => Promise<LabelList>;
+  getLabel: (id: string) => Promise<Label>;
+  getDrafts: (params?: {
+    maxResults?: number;
+    pageToken?: string;
+  }) => Promise<DraftList>;
+  getDraft: (id: string, format?: "full" | "minimal" | "raw") => Promise<Draft>;
+  getHistory: (params: {
+    startHistoryId: string;
+    labelId?: string;
+    historyTypes?: string[];
+    maxResults?: number;
+    pageToken?: string;
+  }) => Promise<HistoryList>;
+  executeBatch: <T = unknown>(
+    requests: BatchRequest[]
+  ) => Promise<BatchResponse<T>[]>;
+  batchGetMessages: (
+    ids: string[],
+    format?: "full" | "minimal" | "raw"
+  ) => Promise<BatchResponse<Message>[]>;
+  batchGetThreads: (
+    ids: string[],
+    format?: "full" | "minimal" | "raw"
+  ) => Promise<BatchResponse<Thread>[]>;
+  batchModifyMessages: (
+    requests: Array<{
+      id: string;
+      addLabelIds?: string[];
+      removeLabelIds?: string[];
+    }>
+  ) => Promise<BatchResponse<Message>[]>;
+  batchTrashMessages: (ids: string[]) => Promise<BatchResponse<Message>[]>;
+  batchUntrashMessages: (ids: string[]) => Promise<BatchResponse<Message>[]>;
+};
 
 /**
- * Gmail API client for making authenticated requests to the Gmail API
+ * Creates a Gmail API client for making authenticated requests to the Gmail API
+ *
+ * @param options Client configuration options
+ * @returns Object with methods for interacting with the Gmail API
+ *
+ * @example
+ * const gmail = createGmailApiClient({ accessToken: 'your-token' });
+ * const messages = await gmail.getMessages({ maxResults: 10 });
  */
-export class GmailApiClient {
-  private accessToken: string;
+export const createGmailApiClient = (
+  options: GmailApiClientOptions
+): GmailApiClient => {
+  const { accessToken } = options;
 
-  constructor(options: GmailApiClientOptions) {
-    this.accessToken = options.accessToken;
-  }
-
-  private async fetchGmailApi<T>(
+  /**
+   * Internal helper to fetch data from the Gmail API
+   */
+  const fetchGmailApi = async <T>(
     endpoint: string,
     options: RequestInit = {}
-  ): Promise<T> {
+  ): Promise<T> => {
     const url = `${GMAIL_API_BASE_URL}${endpoint}`;
 
     const response = await fetch(url, {
       ...options,
       headers: {
         ...options.headers,
-        Authorization: `Bearer ${this.accessToken}`,
+        Authorization: `Bearer ${accessToken}`,
         "Content-Type": "application/json",
       },
     });
@@ -77,7 +143,7 @@ export class GmailApiClient {
     }
 
     return response.json();
-  }
+  };
 
   /**
    * Creates and executes a batch request to the Gmail API
@@ -87,14 +153,14 @@ export class GmailApiClient {
    *
    * @example
    * // Fetch multiple messages in a single request
-   * const responses = await gmailClient.executeBatch([
+   * const responses = await gmail.executeBatch([
    *   { method: 'GET', path: '/messages/msg1', id: '1' },
    *   { method: 'GET', path: '/messages/msg2', id: '2' }
    * ]);
    */
-  async executeBatch<T = unknown>(
+  const executeBatch = async <T = unknown>(
     requests: BatchRequest[]
-  ): Promise<BatchResponse<T>[]> {
+  ): Promise<BatchResponse<T>[]> => {
     if (requests.length === 0) {
       return [];
     }
@@ -147,7 +213,7 @@ export class GmailApiClient {
     const response = await fetch(GMAIL_BATCH_URL, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${this.accessToken}`,
+        Authorization: `Bearer ${accessToken}`,
         "Content-Type": `multipart/mixed; boundary=${boundary}`,
       },
       body: requestBody,
@@ -230,7 +296,7 @@ export class GmailApiClient {
     }
 
     return responses;
-  }
+  };
 
   /**
    * Get multiple messages in a single batch request
@@ -241,20 +307,20 @@ export class GmailApiClient {
    *
    * @example
    * // Fetch multiple messages in a single request
-   * const responses = await gmailClient.batchGetMessages(['msg1', 'msg2']);
+   * const responses = await gmail.batchGetMessages(['msg1', 'msg2']);
    * const messages = responses.map(response => response.body);
    */
-  async batchGetMessages(
+  const batchGetMessages = async (
     ids: string[],
     format: "full" | "minimal" | "raw" = "full"
-  ): Promise<BatchResponse<Message>[]> {
+  ): Promise<BatchResponse<Message>[]> => {
     const requests: BatchRequest[] = ids.map((id, index) => ({
       method: "GET",
       path: `/messages/${id}?format=${format}`,
       id: `msg-${index}`,
     }));
 
-    const responses = await this.executeBatch<Message>(requests);
+    const responses = await executeBatch<Message>(requests);
 
     // Validate each response body with Zod schema
     return responses.map((response) => {
@@ -268,7 +334,7 @@ export class GmailApiClient {
       }
       return response;
     });
-  }
+  };
 
   /**
    * Get multiple threads in a single batch request
@@ -279,20 +345,20 @@ export class GmailApiClient {
    *
    * @example
    * // Fetch multiple threads in a single request
-   * const responses = await gmailClient.batchGetThreads(['thread1', 'thread2']);
+   * const responses = await gmail.batchGetThreads(['thread1', 'thread2']);
    * const threads = responses.map(response => response.body);
    */
-  async batchGetThreads(
+  const batchGetThreads = async (
     ids: string[],
     format: "full" | "minimal" | "raw" = "full"
-  ): Promise<BatchResponse<Thread>[]> {
+  ): Promise<BatchResponse<Thread>[]> => {
     const requests: BatchRequest[] = ids.map((id, index) => ({
       method: "GET",
       path: `/threads/${id}?format=${format}`,
       id: `thread-${index}`,
     }));
 
-    const responses = await this.executeBatch<Thread>(requests);
+    const responses = await executeBatch<Thread>(requests);
 
     // Validate each response body with Zod schema
     return responses.map((response) => {
@@ -306,7 +372,7 @@ export class GmailApiClient {
       }
       return response;
     });
-  }
+  };
 
   /**
    * Modify multiple messages in a single batch request
@@ -316,18 +382,18 @@ export class GmailApiClient {
    *
    * @example
    * // Add and remove labels from multiple messages in a single request
-   * const responses = await gmailClient.batchModifyMessages([
+   * const responses = await gmail.batchModifyMessages([
    *   { id: 'msg1', addLabelIds: ['INBOX'], removeLabelIds: ['TRASH'] },
    *   { id: 'msg2', addLabelIds: ['IMPORTANT'] }
    * ]);
    */
-  async batchModifyMessages(
+  const batchModifyMessages = async (
     requests: Array<{
       id: string;
       addLabelIds?: string[];
       removeLabelIds?: string[];
     }>
-  ): Promise<BatchResponse<Message>[]> {
+  ): Promise<BatchResponse<Message>[]> => {
     const batchRequests: BatchRequest[] = requests.map((request, index) => ({
       method: "POST",
       path: `/messages/${request.id}/modify`,
@@ -338,7 +404,7 @@ export class GmailApiClient {
       },
     }));
 
-    const responses = await this.executeBatch<Message>(batchRequests);
+    const responses = await executeBatch<Message>(batchRequests);
 
     // Validate each response body with Zod schema
     return responses.map((response) => {
@@ -352,7 +418,7 @@ export class GmailApiClient {
       }
       return response;
     });
-  }
+  };
 
   /**
    * Trash multiple messages in a single batch request
@@ -362,16 +428,18 @@ export class GmailApiClient {
    *
    * @example
    * // Trash multiple messages in a single request
-   * const responses = await gmailClient.batchTrashMessages(['msg1', 'msg2']);
+   * const responses = await gmail.batchTrashMessages(['msg1', 'msg2']);
    */
-  async batchTrashMessages(ids: string[]): Promise<BatchResponse<Message>[]> {
+  const batchTrashMessages = async (
+    ids: string[]
+  ): Promise<BatchResponse<Message>[]> => {
     const requests: BatchRequest[] = ids.map((id, index) => ({
       method: "POST",
       path: `/messages/${id}/trash`,
       id: `trash-${index}`,
     }));
 
-    const responses = await this.executeBatch<Message>(requests);
+    const responses = await executeBatch<Message>(requests);
 
     // Validate each response body with Zod schema
     return responses.map((response) => {
@@ -385,7 +453,7 @@ export class GmailApiClient {
       }
       return response;
     });
-  }
+  };
 
   /**
    * Untrash multiple messages in a single batch request
@@ -395,16 +463,18 @@ export class GmailApiClient {
    *
    * @example
    * // Untrash multiple messages in a single request
-   * const responses = await gmailClient.batchUntrashMessages(['msg1', 'msg2']);
+   * const responses = await gmail.batchUntrashMessages(['msg1', 'msg2']);
    */
-  async batchUntrashMessages(ids: string[]): Promise<BatchResponse<Message>[]> {
+  const batchUntrashMessages = async (
+    ids: string[]
+  ): Promise<BatchResponse<Message>[]> => {
     const requests: BatchRequest[] = ids.map((id, index) => ({
       method: "POST",
       path: `/messages/${id}/untrash`,
       id: `untrash-${index}`,
     }));
 
-    const responses = await this.executeBatch<Message>(requests);
+    const responses = await executeBatch<Message>(requests);
 
     // Validate each response body with Zod schema
     return responses.map((response) => {
@@ -418,17 +488,19 @@ export class GmailApiClient {
       }
       return response;
     });
-  }
+  };
 
-  // Messages
-  async getMessages(
+  /**
+   * Get messages with pagination and filtering options
+   */
+  const getMessages = async (
     params: {
       maxResults?: number;
       labelIds?: string[];
       q?: string;
       pageToken?: string;
     } = {}
-  ): Promise<MessageList> {
+  ): Promise<MessageList> => {
     const searchParams = new URLSearchParams();
 
     if (params.maxResults)
@@ -443,25 +515,30 @@ export class GmailApiClient {
       ? `?${searchParams.toString()}`
       : "";
 
-    return this.fetchGmailApi<MessageList>(`/messages${queryString}`);
-  }
+    return fetchGmailApi<MessageList>(`/messages${queryString}`);
+  };
 
-  async getMessage(
+  /**
+   * Get a single message by ID
+   */
+  const getMessage = async (
     id: string,
     format: "full" | "minimal" | "raw" = "full"
-  ): Promise<Message> {
-    return this.fetchGmailApi<Message>(`/messages/${id}?format=${format}`);
-  }
+  ): Promise<Message> => {
+    return fetchGmailApi<Message>(`/messages/${id}?format=${format}`);
+  };
 
-  // Threads
-  async getThreads(
+  /**
+   * Get threads with pagination and filtering options
+   */
+  const getThreads = async (
     params: {
       maxResults?: number;
       labelIds?: string[];
       q?: string;
       pageToken?: string;
     } = {}
-  ): Promise<ThreadList> {
+  ): Promise<ThreadList> => {
     const searchParams = new URLSearchParams();
 
     if (params.maxResults)
@@ -476,29 +553,39 @@ export class GmailApiClient {
       ? `?${searchParams.toString()}`
       : "";
 
-    return this.fetchGmailApi<ThreadList>(`/threads${queryString}`);
-  }
+    return fetchGmailApi<ThreadList>(`/threads${queryString}`);
+  };
 
-  async getThread(
+  /**
+   * Get a single thread by ID
+   */
+  const getThread = async (
     id: string,
     format: "full" | "minimal" | "raw" = "full"
-  ): Promise<Thread> {
-    return this.fetchGmailApi<Thread>(`/threads/${id}?format=${format}`);
-  }
+  ): Promise<Thread> => {
+    return fetchGmailApi<Thread>(`/threads/${id}?format=${format}`);
+  };
 
-  // Labels
-  async getLabels(): Promise<LabelList> {
-    return this.fetchGmailApi<LabelList>(`/labels`);
-  }
+  /**
+   * Get all labels
+   */
+  const getLabels = async (): Promise<LabelList> => {
+    return fetchGmailApi<LabelList>(`/labels`);
+  };
 
-  async getLabel(id: string): Promise<Label> {
-    return this.fetchGmailApi<Label>(`/labels/${id}`);
-  }
+  /**
+   * Get a label by ID
+   */
+  const getLabel = async (id: string): Promise<Label> => {
+    return fetchGmailApi<Label>(`/labels/${id}`);
+  };
 
-  // Drafts
-  async getDrafts(
+  /**
+   * Get drafts with pagination
+   */
+  const getDrafts = async (
     params: { maxResults?: number; pageToken?: string } = {}
-  ): Promise<DraftList> {
+  ): Promise<DraftList> => {
     const searchParams = new URLSearchParams();
 
     if (params.maxResults)
@@ -509,24 +596,29 @@ export class GmailApiClient {
       ? `?${searchParams.toString()}`
       : "";
 
-    return this.fetchGmailApi<DraftList>(`/drafts${queryString}`);
-  }
+    return fetchGmailApi<DraftList>(`/drafts${queryString}`);
+  };
 
-  async getDraft(
+  /**
+   * Get a single draft by ID
+   */
+  const getDraft = async (
     id: string,
     format: "full" | "minimal" | "raw" = "full"
-  ): Promise<Draft> {
-    return this.fetchGmailApi<Draft>(`/drafts/${id}?format=${format}`);
-  }
+  ): Promise<Draft> => {
+    return fetchGmailApi<Draft>(`/drafts/${id}?format=${format}`);
+  };
 
-  // History
-  async getHistory(params: {
+  /**
+   * Get history changes since a specific point
+   */
+  const getHistory = async (params: {
     startHistoryId: string;
     labelId?: string;
     historyTypes?: string[];
     maxResults?: number;
     pageToken?: string;
-  }): Promise<HistoryList> {
+  }): Promise<HistoryList> => {
     const searchParams = new URLSearchParams();
 
     searchParams.append("startHistoryId", params.startHistoryId);
@@ -544,6 +636,24 @@ export class GmailApiClient {
       ? `?${searchParams.toString()}`
       : "";
 
-    return this.fetchGmailApi<HistoryList>(`/history${queryString}`);
-  }
-}
+    return fetchGmailApi<HistoryList>(`/history${queryString}`);
+  };
+
+  return {
+    getMessages,
+    getMessage,
+    getThreads,
+    getThread,
+    getLabels,
+    getLabel,
+    getDrafts,
+    getDraft,
+    getHistory,
+    executeBatch,
+    batchGetMessages,
+    batchGetThreads,
+    batchModifyMessages,
+    batchTrashMessages,
+    batchUntrashMessages,
+  };
+};
