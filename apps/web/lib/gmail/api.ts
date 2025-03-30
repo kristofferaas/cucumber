@@ -5,11 +5,17 @@ import type {
   Label,
   LabelList,
   Message,
+  MessageAttachment,
   MessageList,
   Thread,
   ThreadList,
 } from "./schemas";
-import { MessageSchema, ThreadSchema } from "./schemas";
+import {
+  MessageSchema,
+  MessageAttachmentSchema,
+  ThreadSchema,
+} from "./schemas";
+import { z } from "zod";
 
 // Constants
 export const GMAIL_API_BASE_URL =
@@ -28,6 +34,13 @@ export type BatchRequestBody =
   | null
   | undefined;
 
+// Attachment request type
+export type AttachmentRequest = {
+  messageId: string;
+  attachmentId: string;
+  id?: string;
+};
+
 // Batch request types
 export type BatchRequest = {
   method: string;
@@ -42,6 +55,16 @@ export type BatchResponse<T = unknown> = {
   status: number;
   headers: Record<string, string>;
   body: T;
+  error?: {
+    code: number;
+    message: string;
+    errors?: Array<{
+      message: string;
+      domain: string;
+      reason: string;
+    }>;
+    status?: string;
+  };
 };
 
 // Gmail API client return type
@@ -56,6 +79,10 @@ export type GmailApiClient = {
     id: string,
     format?: "full" | "minimal" | "raw"
   ) => Promise<Message>;
+  getAttachment: (
+    messageId: string,
+    attachmentId: string
+  ) => Promise<MessageAttachment>;
   getThreads: (params?: {
     maxResults?: number;
     labelIds?: string[];
@@ -91,6 +118,9 @@ export type GmailApiClient = {
     ids: string[],
     format?: "full" | "minimal" | "raw"
   ) => Promise<BatchResponse<Thread>[]>;
+  batchGetAttachments: (
+    requests: AttachmentRequest[]
+  ) => Promise<BatchResponse<MessageAttachment>[]>;
   batchModifyMessages: (
     requests: Array<{
       id: string;
@@ -227,8 +257,15 @@ export const createGmailApiClient = (
     const responseText = await response.text();
     const responses: BatchResponse<T>[] = [];
 
+    // Extract the actual boundary from the response
+    // Look for the first boundary line pattern in the response
+    const responseBoundaryMatch = responseText.match(/--([a-zA-Z0-9_]+)/);
+    const responseBoundary = responseBoundaryMatch
+      ? responseBoundaryMatch[1]
+      : boundary;
+
     // Split the response by boundary
-    const parts = responseText.split(`--${boundary}`);
+    const parts = responseText.split(`--${responseBoundary}`);
 
     // Process each part (excluding the first and last elements which are empty or closing markers)
     for (let i = 1; i < parts.length - 1; i++) {
@@ -287,15 +324,111 @@ export const createGmailApiClient = (
         }
       }
 
-      responses.push({
+      const batchResponse: BatchResponse<T> = {
         id,
         status,
         headers,
         body: body as T,
-      });
+      };
+
+      // Extract error information if status code indicates an error
+      if (status >= 400 && typeof body === "object" && body !== null) {
+        const errorBody = body as Record<string, unknown>;
+        if (
+          "error" in errorBody &&
+          typeof errorBody.error === "object" &&
+          errorBody.error !== null
+        ) {
+          const error = errorBody.error as Record<string, unknown>;
+          batchResponse.error = {
+            code: typeof error.code === "number" ? error.code : status,
+            message:
+              typeof error.message === "string"
+                ? error.message
+                : "Unknown error",
+            errors: Array.isArray(error.errors) ? error.errors : undefined,
+            status: typeof error.status === "string" ? error.status : undefined,
+          };
+        }
+      }
+
+      responses.push(batchResponse);
     }
 
     return responses;
+  };
+
+  /**
+   * Get an attachment from a message
+   *
+   * @param messageId ID of the message containing the attachment
+   * @param attachmentId ID of the attachment to fetch
+   * @returns The attachment data
+   *
+   * @example
+   * // Fetch an attachment from a message
+   * const attachment = await gmail.getAttachment('msg1', 'attachment1');
+   * // Use the base64 encoded data
+   * const decodedData = atob(attachment.data);
+   */
+  const getAttachment = async (
+    messageId: string,
+    attachmentId: string
+  ): Promise<MessageAttachment> => {
+    const response = await fetchGmailApi<unknown>(
+      `/messages/${messageId}/attachments/${attachmentId}`
+    );
+
+    const result = MessageAttachmentSchema.safeParse(response);
+    if (result.success) {
+      return result.data;
+    }
+
+    console.error("Failed to validate attachment response:", result.error);
+    return response as MessageAttachment;
+  };
+
+  /**
+   * Get multiple attachments in a single batch request
+   *
+   * @param requests Array of attachment requests containing messageId and attachmentId
+   * @returns Array of batch responses containing the attachments
+   *
+   * @example
+   * // Fetch multiple attachments in a single request
+   * const responses = await gmail.batchGetAttachments([
+   *   { messageId: 'msg1', attachmentId: 'att1', id: 'attachment-1' },
+   *   { messageId: 'msg2', attachmentId: 'att2', id: 'attachment-2' }
+   * ]);
+   * // Access attachment data
+   * const attachmentData = responses[0].body.data;
+   */
+  const batchGetAttachments = async (
+    requests: AttachmentRequest[]
+  ): Promise<BatchResponse<MessageAttachment>[]> => {
+    const batchRequests: BatchRequest[] = requests.map((request, index) => ({
+      method: "GET",
+      path: `/messages/${request.messageId}/attachments/${request.attachmentId}`,
+      id: request.id || `attachment-${index}`,
+    }));
+
+    const responses = await executeBatch<unknown>(batchRequests);
+
+    // Validate each response body with Zod schema
+    return responses.map((response) => {
+      if (response.status === 200) {
+        const result = MessageAttachmentSchema.safeParse(response.body);
+        if (result.success) {
+          response.body = result.data;
+        } else {
+          console.error(
+            `Failed to validate attachment response:`,
+            result.error
+          );
+        }
+      }
+      return response as BatchResponse<MessageAttachment>;
+    });
   };
 
   /**
@@ -642,6 +775,7 @@ export const createGmailApiClient = (
   return {
     getMessages,
     getMessage,
+    getAttachment,
     getThreads,
     getThread,
     getLabels,
@@ -652,6 +786,7 @@ export const createGmailApiClient = (
     executeBatch,
     batchGetMessages,
     batchGetThreads,
+    batchGetAttachments,
     batchModifyMessages,
     batchTrashMessages,
     batchUntrashMessages,

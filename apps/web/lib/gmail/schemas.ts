@@ -16,6 +16,15 @@ export const MessagePartBodySchema = z.object({
 
 export type MessagePartBody = z.infer<typeof MessagePartBodySchema>;
 
+// Attachment schemas
+export const MessageAttachmentSchema = z.object({
+  data: z.string().optional(), // Base64 encoded attachment data
+  size: z.number(),
+  attachmentId: z.string().optional(),
+});
+
+export type MessageAttachment = z.infer<typeof MessageAttachmentSchema>;
+
 // Define base MessagePart schema without recursive parts field
 export const baseMessagePartSchema = z.object({
   partId: z.string().optional(),

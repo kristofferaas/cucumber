@@ -21,7 +21,7 @@ export default async function MailDetailsPage({
     <div className="container mx-auto py-6 max-w-4xl">
       <div className="bg-background rounded-lg shadow-sm border">
         <div className="p-6">
-          <FullMessage message={message} />
+          <FullMessage message={message} id={id} token={token} />
         </div>
       </div>
     </div>

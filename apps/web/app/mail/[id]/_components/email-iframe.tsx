@@ -88,17 +88,6 @@ export function EmailIframe({ html }: { html: string }) {
       WHOLE_DOCUMENT: true,
     });
 
-    // Convert any remaining cid: URLs directly in the HTML
-    const processedHtml = sanitizedHtml.replace(
-      /src=(['"]?)cid:([^'">\s]+)(['"]?)/gi,
-      (match, prefix, cid, suffix) => {
-        console.log(`Found unprocessed CID URL in iframe HTML: ${cid}`);
-        // Since this CID wasn't replaced earlier, we can't do anything with it here
-        // Block it by using a transparent 1x1 pixel instead
-        return `src=${prefix}data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7${suffix} data-original-cid="${cid}"`;
-      }
-    );
-
     // Full document with CSS and sanitized content
     const documentContent = `
       <!DOCTYPE html>
@@ -107,51 +96,8 @@ export function EmailIframe({ html }: { html: string }) {
           <meta charset="utf-8">
           <meta name="viewport" content="width=device-width, initial-scale=1">
           <base target="_blank">
-          <style>
-            body {
-              font-family: system-ui, -apple-system, sans-serif;
-              margin: 0;
-              padding: 16px;
-              color: #333;
-              line-height: 1.5;
-              max-width: 100%;
-              overflow-wrap: break-word;
-              word-wrap: break-word;
-            }
-            img {
-              max-width: 100%;
-              height: auto;
-            }
-            img[data-original-cid] {
-              border: 1px dashed #ccc;
-              background-color: #f5f5f5;
-              padding: 8px;
-              display: inline-block;
-              position: relative;
-            }
-            img[data-original-cid]:after {
-              content: "Missing image: " attr(data-original-cid);
-              display: block;
-              font-size: 10px;
-              color: #999;
-            }
-            a {
-              color: #0070f3;
-              text-decoration: none;
-            }
-            a:hover {
-              text-decoration: underline;
-            }
-            table {
-              border-collapse: collapse;
-              max-width: 100%;
-            }
-            table, th, td {
-              border: inherit;
-            }
-          </style>
         </head>
-        <body>${processedHtml}</body>
+        <body>${sanitizedHtml}</body>
       </html>
     `;
 
@@ -161,25 +107,6 @@ export function EmailIframe({ html }: { html: string }) {
       iframeDocument.open();
       iframeDocument.write(documentContent);
       iframeDocument.close();
-
-      // Fix any remaining CID references that might be in style attributes
-      const elementsWithStyle =
-        iframeDocument.querySelectorAll("[style*='cid:']");
-      elementsWithStyle.forEach((el) => {
-        if (el.getAttribute("style")?.includes("cid:")) {
-          console.log(
-            "Found element with cid: in style attribute:",
-            el.getAttribute("style")
-          );
-          const newStyle = el
-            .getAttribute("style")
-            ?.replace(
-              /url\(['"]?cid:([^'"]+)['"]?\)/gi,
-              "url('data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7')"
-            );
-          el.setAttribute("style", newStyle || "");
-        }
-      });
 
       // Adjust iframe height to content after a slight delay
       const adjustHeight = () => {

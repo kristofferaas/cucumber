@@ -4,9 +4,10 @@ globs: *.ts,*.tsx
 alwaysApply: false
 ---
 - Use stricest typescript rules.
+- Prefer type over interface when possible.
+- Don't use enums, annotate objects with `as const`.
+- Prefer `unknown` over `any`.
+- Avoid return types if possible, prefer inference.
 - Write type safe code, use `zod` for runtime validation.
 - Use descriptive variable names with auxiliary verbs (e.g., isLoading, hasError).
 - Use functional and declarative programming patterns; avoid classes.
-- Prefer type over interface when possible.
-- Don't use enums, annotate objects with `as const`.
-- Prefer `unknown` over `any`
