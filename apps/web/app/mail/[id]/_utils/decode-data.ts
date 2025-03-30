@@ -12,6 +12,9 @@ export function decodeData(data: string, encoding: Encoding): string {
     case "8bit": {
       return decodeBase64Url(data);
     }
+    case "7bit": {
+      return decodeBase64Url(data);
+    }
     default: {
       throw new Error(`Unsupported encoding: ${encoding}`);
     }

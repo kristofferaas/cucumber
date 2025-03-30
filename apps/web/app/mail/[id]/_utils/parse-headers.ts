@@ -15,7 +15,7 @@ const contentTypeSchema = z.enum([
 ]);
 export type ContentType = z.infer<typeof contentTypeSchema>;
 
-const encodingSchema = z.enum(["base64", "quoted-printable", "8bit"]);
+const encodingSchema = z.enum(["base64", "quoted-printable", "8bit", "7bit"]);
 export type Encoding = z.infer<typeof encodingSchema>;
 
 const contentDetailsSchema = z.object({

@@ -42,6 +42,7 @@ export async function FullMessage({
         const base64Data = Buffer.from(attachment.body.data, "base64").toString(
           "base64"
         );
+
         // Replace with data URI while preserving other attributes
         html = html.replace(
           cidRegex,
@@ -51,9 +52,18 @@ export async function FullMessage({
     });
   }
 
+  const plainText =
+    parts.find((part) => part.contentType === "text/plain")?.data || "";
+
   return (
     <div>
-      <EmailIframe html={html} />
+      {html ? (
+        <EmailIframe html={html} />
+      ) : (
+        <div className="mt-4">
+          <pre className="text-sm text-muted-foreground">{plainText}</pre>
+        </div>
+      )}
     </div>
   );
 }

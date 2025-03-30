@@ -8,7 +8,6 @@ export function messageToHtml(message: Message) {
     throw new Error("No payload found");
   }
 
-  console.log("messageToHtml", message);
   const data = processMessagePart(payload);
 
   return data;

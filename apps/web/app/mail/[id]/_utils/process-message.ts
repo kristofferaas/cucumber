@@ -58,7 +58,7 @@ function processMultipartAlternative(payload: MessagePart): ProcessedPart[] {
 function processTextPlain(payload: MessagePart): ProcessedPart {
   const { mimeType, body, headers, partId } = payload;
 
-  if (!partId) {
+  if (typeof partId !== "string") {
     throw new Error("No partId found in text/plain");
   }
 
@@ -136,7 +136,6 @@ function processMultipartRelated(payload: MessagePart) {
 }
 
 function processTextHtml(payload: MessagePart): ProcessedPart {
-  console.log("processing text/html", payload);
   const { mimeType, body, headers, partId } = payload;
 
   if (typeof partId !== "string") {

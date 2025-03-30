@@ -17,12 +17,20 @@ export default async function MailDetailsPage({
   const gmail = createGmailApiClient({ accessToken: token });
   const message = await gmail.getMessage(id, "full");
 
+  const subject = message.payload?.headers?.find(
+    (header) => header.name === "Subject"
+  )?.value;
+
+  const from = message.payload?.headers?.find(
+    (header) => header.name === "From"
+  )?.value;
+
   return (
     <div className="container mx-auto py-6 max-w-4xl">
-      <div className="bg-background rounded-lg shadow-sm border">
-        <div className="p-6">
-          <FullMessage message={message} id={id} token={token} />
-        </div>
+      <h1 className="text-2xl font-bold py-6">{subject}</h1>
+      <div className="text-sm text-muted-foreground">{from}</div>
+      <div className="py-6">
+        <FullMessage message={message} id={id} token={token} />
       </div>
     </div>
   );
