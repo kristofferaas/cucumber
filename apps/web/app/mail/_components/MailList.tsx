@@ -20,13 +20,16 @@ export function MailList({ token }: { token: string }) {
         const response = await fetchMessages(token, user, pageParam);
         return response;
       },
-      initialPageParam: undefined,
+      initialPageParam: undefined as string | undefined,
       getNextPageParam: (lastPage) => lastPage.nextPageToken,
       staleTime: 1000 * 60 * 5, // 5 minutes
     });
 
   // Combine all messages from all pages
-  const allMessages = data?.pages.flatMap((page) => page.messages) || [];
+  const allMessages =
+    data?.pages.flatMap((page) => {
+      return "messages" in page ? page.messages : [];
+    }) || [];
 
   // Set up virtualizer
   const rowVirtualizer = useVirtualizer({
@@ -88,11 +91,17 @@ export function MailList({ token }: { token: string }) {
       >
         {rowVirtualizer.getVirtualItems().map((virtualRow) => {
           const isLoaderRow = virtualRow.index > allMessages.length - 1;
-          const message = allMessages[virtualRow.index];
+          const message = isLoaderRow
+            ? undefined
+            : allMessages[virtualRow.index];
 
           return (
             <div
-              key={isLoaderRow ? "loader" : message.id}
+              key={
+                isLoaderRow
+                  ? "loader"
+                  : message?.id || `row-${virtualRow.index}`
+              }
               data-index={virtualRow.index}
               className="absolute top-0 left-0 w-full"
               style={{
@@ -107,7 +116,7 @@ export function MailList({ token }: { token: string }) {
                     : "Nothing more to load"}
                 </div>
               ) : (
-                <MailItem message={message} />
+                message && <MailItem message={message} />
               )}
             </div>
           );
