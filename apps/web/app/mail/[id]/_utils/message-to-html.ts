@@ -1,11 +1,12 @@
 import type { Message } from "@/lib/gmail/schemas";
+import { err } from "@/lib/try-catch";
 import { processMessagePart } from "./process-message";
 
 export function messageToHtml(message: Message) {
   const payload = message.payload;
 
   if (!payload) {
-    throw new Error("No payload found");
+    return err(new Error("No payload found"));
   }
 
   const data = processMessagePart(payload);

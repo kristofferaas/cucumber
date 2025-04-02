@@ -2,6 +2,7 @@ import type { MessagePart } from "@/lib/gmail/schemas";
 import { getMimeType } from "./get-mime-type";
 import { getContentDetails } from "./parse-headers";
 import { decodeData } from "./decode-data";
+import { Err, err, Ok, ok } from "@/lib/try-catch";
 
 type ProcessedPart = {
   id: string;
@@ -9,8 +10,13 @@ type ProcessedPart = {
   data: string;
 };
 
-export function processMessagePart(payload: MessagePart): ProcessedPart[] {
-  const mimeType = getMimeType(payload);
+export function processMessagePart(
+  payload: MessagePart
+): Ok<ProcessedPart[]> | Err<Error> {
+  const [mimeType, mimeTypeError] = getMimeType(payload);
+  if (mimeTypeError) {
+    return err(mimeTypeError);
+  }
 
   switch (mimeType) {
     case "multipart/alternative": {
@@ -20,25 +26,39 @@ export function processMessagePart(payload: MessagePart): ProcessedPart[] {
       return processMultipartRelated(payload);
     }
     case "text/plain": {
-      return [processTextPlain(payload)];
+      const [data, error] = processTextPlain(payload);
+      if (error) {
+        return err(error);
+      }
+      return ok([data]);
     }
     case "text/html": {
-      return [processTextHtml(payload)];
+      const [data, error] = processTextHtml(payload);
+      if (error) {
+        return err(error);
+      }
+      return ok([data]);
     }
     case "image/png": {
-      return [processImagePng(payload)];
+      const [data, error] = processImagePng(payload);
+      if (error) {
+        return err(error);
+      }
+      return ok([data]);
     }
     default: {
-      throw new Error(`Unsupported mime type: ${mimeType}`);
+      return err(new Error(`Unsupported mime type: ${mimeType}`));
     }
   }
 }
 
-function processMultipartAlternative(payload: MessagePart): ProcessedPart[] {
+function processMultipartAlternative(
+  payload: MessagePart
+): Ok<ProcessedPart[]> | Err<Error> {
   const { parts } = payload;
 
   if (!parts) {
-    throw new Error("No parts found in multipart/alternative");
+    return err(new Error("No parts found in multipart/alternative"));
   }
 
   const processedParts: ProcessedPart[] = [];
@@ -46,47 +66,62 @@ function processMultipartAlternative(payload: MessagePart): ProcessedPart[] {
   for (const part of parts) {
     const partId = part.partId;
     if (!partId) {
-      throw new Error("No partId found in multipart/alternative");
+      return err(new Error("No partId found in multipart/alternative"));
     }
-    const data = processMessagePart(part);
+    const [data, error] = processMessagePart(part);
+    if (error) {
+      return err(error);
+    }
     processedParts.push(...data);
   }
 
-  return processedParts;
+  return ok(processedParts);
 }
 
-function processTextPlain(payload: MessagePart): ProcessedPart {
+function processTextPlain(
+  payload: MessagePart
+): Ok<ProcessedPart> | Err<Error> {
   const { mimeType, body, headers, partId } = payload;
 
   if (typeof partId !== "string") {
-    throw new Error("No partId found in text/plain");
+    return err(new Error("No partId found in text/plain"));
   }
 
   if (mimeType !== "text/plain") {
-    throw new Error("Mime type is not text/plain");
+    return err(new Error("Mime type is not text/plain"));
   }
 
-  const { charset, encoding } = getContentDetails(headers);
+  const [contentDetails, contentDetailsError] = getContentDetails(headers);
+  if (contentDetailsError) {
+    return err(contentDetailsError);
+  }
+
   const data = body?.data;
 
   if (!data) {
-    throw new Error("No body found in text/plain");
+    return err(new Error("No body found in text/plain"));
   }
 
-  const decodedData = decodeData(data, encoding);
+  const [decodedData, decodeError] = decodeData(data, contentDetails.encoding);
 
-  return {
+  if (decodeError) {
+    return err(decodeError);
+  }
+
+  return ok({
     id: partId,
     contentType: "text/plain",
     data: decodedData,
-  };
+  });
 }
 
-function processMultipartRelated(payload: MessagePart) {
+function processMultipartRelated(
+  payload: MessagePart
+): Ok<ProcessedPart[]> | Err<Error> {
   const { parts, mimeType } = payload;
 
   if (mimeType !== "multipart/related") {
-    throw new Error("Mime type is not multipart/related");
+    return err(new Error("Mime type is not multipart/related"));
   }
 
   const contentType =
@@ -97,86 +132,77 @@ function processMultipartRelated(payload: MessagePart) {
   const mime = contentParts[0];
 
   if (mime !== "multipart/related") {
-    throw new Error(
-      "Mime type is not multipart/related in Content-Type header"
+    return err(
+      new Error("Mime type is not multipart/related in Content-Type header")
     );
   }
 
-  // let boundary = "";
-  // let type = "";
-
-  // // Parse boundary and type from remaining parts
-  // contentParts.slice(1).forEach((part) => {
-  //   if (part.startsWith("boundary=")) {
-  //     boundary = part.replace(/^boundary=["']?([^"']*)["']?$/, "$1");
-  //   } else if (part.startsWith("type=")) {
-  //     type = part.replace(/^type=["']?([^"']*)["']?$/, "$1");
-  //   }
-  // });
-
-  // if (!boundary) {
-  //   throw new Error("No boundary found in Content-Type header");
-  // }
-
-  // if (!type) {
-  //   throw new Error("No type found in Content-Type header");
-  // }
-
   if (!parts) {
-    throw new Error("No parts found in multipart/related");
+    return err(new Error("No parts found in multipart/related"));
   }
 
   const processedParts: ProcessedPart[] = [];
 
   for (const part of parts) {
-    processedParts.push(...processMessagePart(part));
+    const [data, error] = processMessagePart(part);
+    if (error) {
+      return err(error);
+    }
+    processedParts.push(...data);
   }
 
-  return processedParts;
+  return ok(processedParts);
 }
 
-function processTextHtml(payload: MessagePart): ProcessedPart {
+function processTextHtml(payload: MessagePart): Ok<ProcessedPart> | Err<Error> {
   const { mimeType, body, headers, partId } = payload;
 
   if (typeof partId !== "string") {
-    throw new Error("No partId found in text/html");
+    return err(new Error("No partId found in text/html"));
   }
 
   if (mimeType !== "text/html") {
-    throw new Error("Mime type is not text/html");
+    return err(new Error("Mime type is not text/html"));
   }
 
-  const { charset, encoding } = getContentDetails(headers);
+  const [contentDetails, contentDetailsError] = getContentDetails(headers);
+  if (contentDetailsError) {
+    return err(contentDetailsError);
+  }
+
   const data = body?.data;
-
   if (!data) {
-    throw new Error("No body found in text/html");
+    return err(new Error("No body found in text/html"));
   }
 
-  const decodedData = decodeData(data, encoding);
+  const [decodedData, decodeError] = decodeData(data, contentDetails.encoding);
 
-  return {
+  if (decodeError) {
+    return err(decodeError);
+  }
+
+  return ok({
     id: partId,
     contentType: "text/html",
     data: decodedData,
-  };
+  });
 }
 
-function processImagePng(payload: MessagePart): ProcessedPart {
+function processImagePng(payload: MessagePart): Ok<ProcessedPart> | Err<Error> {
   const { mimeType, body, headers, partId } = payload;
 
   if (!partId) {
-    throw new Error("No partId found in image/png");
+    return err(new Error("No partId found in image/png"));
   }
 
   if (mimeType !== "image/png") {
-    throw new Error("Mime type is not image/png");
+    return err(new Error("Mime type is not image/png"));
   }
 
   const attachmentId = body?.attachmentId;
 
   if (!attachmentId) {
-    throw new Error("No attachmentId found in image/png");
+    return err(new Error("No attachmentId found in image/png"));
   }
 
   const cid =
@@ -184,9 +210,9 @@ function processImagePng(payload: MessagePart): ProcessedPart {
   // remove < and >
   const cidWithoutTags = cid.replace(/[<>]/g, "");
 
-  return {
+  return ok({
     id: cidWithoutTags,
     contentType: "image/png",
     data: attachmentId,
-  };
+  });
 }

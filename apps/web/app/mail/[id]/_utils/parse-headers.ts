@@ -1,3 +1,5 @@
+import { err } from "@/lib/try-catch";
+import { parse } from "@/lib/try-catch/std";
 import { z } from "zod";
 
 const charsetSchema = z.enum(["utf-8", "iso-8859-1"]);
@@ -29,7 +31,7 @@ const contentDetailsSchema = z.object({
  */
 export function getContentDetails(headers?: { name: string; value: string }[]) {
   if (!headers) {
-    throw new Error("No headers found");
+    return err(new Error("No headers found"));
   }
 
   let charset = "utf-8";
@@ -50,5 +52,5 @@ export function getContentDetails(headers?: { name: string; value: string }[]) {
     }
   }
 
-  return contentDetailsSchema.parse({ charset, mimeType, encoding });
+  return parse(contentDetailsSchema, { charset, mimeType, encoding });
 }

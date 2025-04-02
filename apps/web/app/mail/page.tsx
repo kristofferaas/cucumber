@@ -4,9 +4,9 @@ import { UserGuard } from "./_components/UserGuard";
 import { InboxBanner } from "./_components/layout/inbox-banner";
 
 export default async function MailPage() {
-  const { token } = await getGoogleToken();
+  const [token, tokenError] = await getGoogleToken();
 
-  if (!token) {
+  if (tokenError) {
     return <div>No token found</div>;
   }
 

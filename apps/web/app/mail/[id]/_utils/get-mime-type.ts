@@ -1,4 +1,5 @@
 import { MessagePart } from "@/lib/gmail/schemas";
+import { parse } from "@/lib/try-catch/std";
 import { z } from "zod";
 
 const mimeTypeSchema = z.enum([
@@ -15,6 +16,5 @@ const mimeTypeSchema = z.enum([
 export type MimeType = z.infer<typeof mimeTypeSchema>;
 
 export function getMimeType(part: MessagePart) {
-  const mimeType = mimeTypeSchema.parse(part.mimeType);
-  return mimeType;
+  return parse(mimeTypeSchema, part.mimeType);
 }

@@ -1,3 +1,4 @@
+import { Err, err, Ok, ok, wrap } from "../try-catch";
 import type {
   Draft,
   DraftList,
@@ -67,71 +68,6 @@ export type BatchResponse<T = unknown> = {
   };
 };
 
-// Gmail API client return type
-export type GmailApiClient = {
-  getMessages: (params?: {
-    maxResults?: number;
-    labelIds?: string[];
-    q?: string;
-    pageToken?: string;
-  }) => Promise<MessageList>;
-  getMessage: (
-    id: string,
-    format?: "full" | "minimal" | "raw"
-  ) => Promise<Message>;
-  getAttachment: (
-    messageId: string,
-    attachmentId: string
-  ) => Promise<MessageAttachment>;
-  getThreads: (params?: {
-    maxResults?: number;
-    labelIds?: string[];
-    q?: string;
-    pageToken?: string;
-  }) => Promise<ThreadList>;
-  getThread: (
-    id: string,
-    format?: "full" | "minimal" | "raw"
-  ) => Promise<Thread>;
-  getLabels: () => Promise<LabelList>;
-  getLabel: (id: string) => Promise<Label>;
-  getDrafts: (params?: {
-    maxResults?: number;
-    pageToken?: string;
-  }) => Promise<DraftList>;
-  getDraft: (id: string, format?: "full" | "minimal" | "raw") => Promise<Draft>;
-  getHistory: (params: {
-    startHistoryId: string;
-    labelId?: string;
-    historyTypes?: string[];
-    maxResults?: number;
-    pageToken?: string;
-  }) => Promise<HistoryList>;
-  executeBatch: <T = unknown>(
-    requests: BatchRequest[]
-  ) => Promise<BatchResponse<T>[]>;
-  batchGetMessages: (
-    ids: string[],
-    format?: "full" | "minimal" | "raw"
-  ) => Promise<BatchResponse<Message>[]>;
-  batchGetThreads: (
-    ids: string[],
-    format?: "full" | "minimal" | "raw"
-  ) => Promise<BatchResponse<Thread>[]>;
-  batchGetAttachments: (
-    requests: AttachmentRequest[]
-  ) => Promise<BatchResponse<MessageAttachment>[]>;
-  batchModifyMessages: (
-    requests: Array<{
-      id: string;
-      addLabelIds?: string[];
-      removeLabelIds?: string[];
-    }>
-  ) => Promise<BatchResponse<Message>[]>;
-  batchTrashMessages: (ids: string[]) => Promise<BatchResponse<Message>[]>;
-  batchUntrashMessages: (ids: string[]) => Promise<BatchResponse<Message>[]>;
-};
-
 /**
  * Creates a Gmail API client for making authenticated requests to the Gmail API
  *
@@ -142,9 +78,7 @@ export type GmailApiClient = {
  * const gmail = createGmailApiClient({ accessToken: 'your-token' });
  * const messages = await gmail.getMessages({ maxResults: 10 });
  */
-export const createGmailApiClient = (
-  options: GmailApiClientOptions
-): GmailApiClient => {
+export const createGmailApiClient = (options: GmailApiClientOptions) => {
   const { accessToken } = options;
 
   /**
@@ -153,26 +87,43 @@ export const createGmailApiClient = (
   const fetchGmailApi = async <T>(
     endpoint: string,
     options: RequestInit = {}
-  ): Promise<T> => {
+  ): Promise<Ok<T> | Err<Error>> => {
     const url = `${GMAIL_API_BASE_URL}${endpoint}`;
 
-    const response = await fetch(url, {
-      ...options,
-      headers: {
-        ...options.headers,
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-      },
-    });
+    const [response, error] = await wrap(
+      fetch(url, {
+        ...options,
+        headers: {
+          ...options.headers,
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+      })
+    );
+
+    if (error) {
+      return err(error);
+    }
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(
-        `Gmail API Error (${response.status}): ${JSON.stringify(errorData)}`
+      const [json, jsonError] = await wrap(response.json());
+      if (jsonError) {
+        return err(jsonError);
+      }
+
+      return err(
+        new Error(
+          `Gmail API Error (${response.status}): ${JSON.stringify(json)}`
+        )
       );
     }
 
-    return response.json();
+    const [json, jsonError] = await wrap(response.json());
+    if (jsonError) {
+      return err(jsonError);
+    }
+
+    return ok(json);
   };
 
   /**
@@ -190,13 +141,15 @@ export const createGmailApiClient = (
    */
   const executeBatch = async <T = unknown>(
     requests: BatchRequest[]
-  ): Promise<BatchResponse<T>[]> => {
+  ): Promise<Ok<BatchResponse<T>[]> | Err<Error>> => {
     if (requests.length === 0) {
-      return [];
+      return ok([]);
     }
 
     if (requests.length > 100) {
-      throw new Error("Batch requests are limited to 100 requests per batch");
+      return err(
+        new Error("Batch requests are limited to 100 requests per batch")
+      );
     }
 
     // Generate a unique boundary string
@@ -240,17 +193,25 @@ export const createGmailApiClient = (
     requestBody += `--${boundary}--`;
 
     // Send the batch request
-    const response = await fetch(GMAIL_BATCH_URL, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": `multipart/mixed; boundary=${boundary}`,
-      },
-      body: requestBody,
-    });
+    const [response, error] = await wrap(
+      fetch(GMAIL_BATCH_URL, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": `multipart/mixed; boundary=${boundary}`,
+        },
+        body: requestBody,
+      })
+    );
+
+    if (error) {
+      return err(error);
+    }
 
     if (!response.ok) {
-      throw new Error(`Batch request failed with status ${response.status}`);
+      return err(
+        new Error(`Batch request failed with status ${response.status}`)
+      );
     }
 
     // Parse the multipart response
@@ -355,7 +316,7 @@ export const createGmailApiClient = (
       responses.push(batchResponse);
     }
 
-    return responses;
+    return ok(responses);
   };
 
   /**
@@ -371,21 +332,21 @@ export const createGmailApiClient = (
    * // Use the base64 encoded data
    * const decodedData = atob(attachment.data);
    */
-  const getAttachment = async (
-    messageId: string,
-    attachmentId: string
-  ): Promise<MessageAttachment> => {
-    const response = await fetchGmailApi<unknown>(
+  const getAttachment = async (messageId: string, attachmentId: string) => {
+    const [response, error] = await fetchGmailApi<unknown>(
       `/messages/${messageId}/attachments/${attachmentId}`
     );
 
-    const result = MessageAttachmentSchema.safeParse(response);
-    if (result.success) {
-      return result.data;
+    if (error) {
+      return err(error);
     }
 
-    console.error("Failed to validate attachment response:", result.error);
-    return response as MessageAttachment;
+    const result = MessageAttachmentSchema.safeParse(response);
+    if (result.success) {
+      return ok(result.data);
+    }
+
+    return err(new Error("Failed to validate attachment response"));
   };
 
   /**
@@ -403,32 +364,36 @@ export const createGmailApiClient = (
    * // Access attachment data
    * const attachmentData = responses[0].body.data;
    */
-  const batchGetAttachments = async (
-    requests: AttachmentRequest[]
-  ): Promise<BatchResponse<MessageAttachment>[]> => {
+  const batchGetAttachments = async (requests: AttachmentRequest[]) => {
     const batchRequests: BatchRequest[] = requests.map((request, index) => ({
       method: "GET",
       path: `/messages/${request.messageId}/attachments/${request.attachmentId}`,
       id: request.id || `attachment-${index}`,
     }));
 
-    const responses = await executeBatch<unknown>(batchRequests);
+    const [responses, error] = await executeBatch<unknown>(batchRequests);
+
+    if (error) {
+      return err(error);
+    }
 
     // Validate each response body with Zod schema
-    return responses.map((response) => {
-      if (response.status === 200) {
-        const result = MessageAttachmentSchema.safeParse(response.body);
-        if (result.success) {
-          response.body = result.data;
-        } else {
-          console.error(
-            `Failed to validate attachment response:`,
-            result.error
-          );
+    return ok(
+      responses.map((response) => {
+        if (response.status === 200) {
+          const result = MessageAttachmentSchema.safeParse(response.body);
+          if (result.success) {
+            response.body = result.data;
+          } else {
+            console.error(
+              `Failed to validate attachment response:`,
+              result.error
+            );
+          }
         }
-      }
-      return response as BatchResponse<MessageAttachment>;
-    });
+        return response as BatchResponse<MessageAttachment>;
+      })
+    );
   };
 
   /**
@@ -446,27 +411,33 @@ export const createGmailApiClient = (
   const batchGetMessages = async (
     ids: string[],
     format: "full" | "minimal" | "raw" = "full"
-  ): Promise<BatchResponse<Message>[]> => {
+  ) => {
     const requests: BatchRequest[] = ids.map((id, index) => ({
       method: "GET",
       path: `/messages/${id}?format=${format}`,
       id: `msg-${index}`,
     }));
 
-    const responses = await executeBatch<Message>(requests);
+    const [responses, error] = await executeBatch<Message>(requests);
+
+    if (error) {
+      return err(error);
+    }
 
     // Validate each response body with Zod schema
-    return responses.map((response) => {
-      if (response.status === 200) {
-        const result = MessageSchema.safeParse(response.body);
-        if (result.success) {
-          response.body = result.data;
-        } else {
-          console.error(`Failed to validate message response:`, result.error);
+    return ok(
+      responses.map((response) => {
+        if (response.status === 200) {
+          const result = MessageSchema.safeParse(response.body);
+          if (result.success) {
+            response.body = result.data;
+          } else {
+            console.error(`Failed to validate message response:`, result.error);
+          }
         }
-      }
-      return response;
-    });
+        return response;
+      })
+    );
   };
 
   /**
@@ -484,27 +455,33 @@ export const createGmailApiClient = (
   const batchGetThreads = async (
     ids: string[],
     format: "full" | "minimal" | "raw" = "full"
-  ): Promise<BatchResponse<Thread>[]> => {
+  ) => {
     const requests: BatchRequest[] = ids.map((id, index) => ({
       method: "GET",
       path: `/threads/${id}?format=${format}`,
       id: `thread-${index}`,
     }));
 
-    const responses = await executeBatch<Thread>(requests);
+    const [responses, error] = await executeBatch<Thread>(requests);
+
+    if (error) {
+      return err(error);
+    }
 
     // Validate each response body with Zod schema
-    return responses.map((response) => {
-      if (response.status === 200) {
-        const result = ThreadSchema.safeParse(response.body);
-        if (result.success) {
-          response.body = result.data;
-        } else {
-          console.error(`Failed to validate thread response:`, result.error);
+    return ok(
+      responses.map((response) => {
+        if (response.status === 200) {
+          const result = ThreadSchema.safeParse(response.body);
+          if (result.success) {
+            response.body = result.data;
+          } else {
+            console.error(`Failed to validate thread response:`, result.error);
+          }
         }
-      }
-      return response;
-    });
+        return response;
+      })
+    );
   };
 
   /**
@@ -526,7 +503,7 @@ export const createGmailApiClient = (
       addLabelIds?: string[];
       removeLabelIds?: string[];
     }>
-  ): Promise<BatchResponse<Message>[]> => {
+  ) => {
     const batchRequests: BatchRequest[] = requests.map((request, index) => ({
       method: "POST",
       path: `/messages/${request.id}/modify`,
@@ -537,20 +514,26 @@ export const createGmailApiClient = (
       },
     }));
 
-    const responses = await executeBatch<Message>(batchRequests);
+    const [responses, error] = await executeBatch<Message>(batchRequests);
+
+    if (error) {
+      return err(error);
+    }
 
     // Validate each response body with Zod schema
-    return responses.map((response) => {
-      if (response.status === 200) {
-        const result = MessageSchema.safeParse(response.body);
-        if (result.success) {
-          response.body = result.data;
-        } else {
-          console.error(`Failed to validate message response:`, result.error);
+    return ok(
+      responses.map((response) => {
+        if (response.status === 200) {
+          const result = MessageSchema.safeParse(response.body);
+          if (result.success) {
+            response.body = result.data;
+          } else {
+            console.error(`Failed to validate message response:`, result.error);
+          }
         }
-      }
-      return response;
-    });
+        return response;
+      })
+    );
   };
 
   /**
@@ -563,29 +546,33 @@ export const createGmailApiClient = (
    * // Trash multiple messages in a single request
    * const responses = await gmail.batchTrashMessages(['msg1', 'msg2']);
    */
-  const batchTrashMessages = async (
-    ids: string[]
-  ): Promise<BatchResponse<Message>[]> => {
+  const batchTrashMessages = async (ids: string[]) => {
     const requests: BatchRequest[] = ids.map((id, index) => ({
       method: "POST",
       path: `/messages/${id}/trash`,
       id: `trash-${index}`,
     }));
 
-    const responses = await executeBatch<Message>(requests);
+    const [responses, error] = await executeBatch<Message>(requests);
+
+    if (error) {
+      return err(error);
+    }
 
     // Validate each response body with Zod schema
-    return responses.map((response) => {
-      if (response.status === 200) {
-        const result = MessageSchema.safeParse(response.body);
-        if (result.success) {
-          response.body = result.data;
-        } else {
-          console.error(`Failed to validate message response:`, result.error);
+    return ok(
+      responses.map((response) => {
+        if (response.status === 200) {
+          const result = MessageSchema.safeParse(response.body);
+          if (result.success) {
+            response.body = result.data;
+          } else {
+            console.error(`Failed to validate message response:`, result.error);
+          }
         }
-      }
-      return response;
-    });
+        return response;
+      })
+    );
   };
 
   /**
@@ -598,29 +585,33 @@ export const createGmailApiClient = (
    * // Untrash multiple messages in a single request
    * const responses = await gmail.batchUntrashMessages(['msg1', 'msg2']);
    */
-  const batchUntrashMessages = async (
-    ids: string[]
-  ): Promise<BatchResponse<Message>[]> => {
+  const batchUntrashMessages = async (ids: string[]) => {
     const requests: BatchRequest[] = ids.map((id, index) => ({
       method: "POST",
       path: `/messages/${id}/untrash`,
       id: `untrash-${index}`,
     }));
 
-    const responses = await executeBatch<Message>(requests);
+    const [responses, error] = await executeBatch<Message>(requests);
+
+    if (error) {
+      return err(error);
+    }
 
     // Validate each response body with Zod schema
-    return responses.map((response) => {
-      if (response.status === 200) {
-        const result = MessageSchema.safeParse(response.body);
-        if (result.success) {
-          response.body = result.data;
-        } else {
-          console.error(`Failed to validate message response:`, result.error);
+    return ok(
+      responses.map((response) => {
+        if (response.status === 200) {
+          const result = MessageSchema.safeParse(response.body);
+          if (result.success) {
+            response.body = result.data;
+          } else {
+            console.error(`Failed to validate message response:`, result.error);
+          }
         }
-      }
-      return response;
-    });
+        return response;
+      })
+    );
   };
 
   /**
@@ -633,7 +624,7 @@ export const createGmailApiClient = (
       q?: string;
       pageToken?: string;
     } = {}
-  ): Promise<MessageList> => {
+  ) => {
     const searchParams = new URLSearchParams();
 
     if (params.maxResults)
@@ -657,7 +648,7 @@ export const createGmailApiClient = (
   const getMessage = async (
     id: string,
     format: "full" | "minimal" | "raw" = "full"
-  ): Promise<Message> => {
+  ) => {
     return fetchGmailApi<Message>(`/messages/${id}?format=${format}`);
   };
 
@@ -671,7 +662,7 @@ export const createGmailApiClient = (
       q?: string;
       pageToken?: string;
     } = {}
-  ): Promise<ThreadList> => {
+  ) => {
     const searchParams = new URLSearchParams();
 
     if (params.maxResults)
@@ -695,21 +686,21 @@ export const createGmailApiClient = (
   const getThread = async (
     id: string,
     format: "full" | "minimal" | "raw" = "full"
-  ): Promise<Thread> => {
+  ) => {
     return fetchGmailApi<Thread>(`/threads/${id}?format=${format}`);
   };
 
   /**
    * Get all labels
    */
-  const getLabels = async (): Promise<LabelList> => {
+  const getLabels = async () => {
     return fetchGmailApi<LabelList>(`/labels`);
   };
 
   /**
    * Get a label by ID
    */
-  const getLabel = async (id: string): Promise<Label> => {
+  const getLabel = async (id: string) => {
     return fetchGmailApi<Label>(`/labels/${id}`);
   };
 
@@ -718,7 +709,7 @@ export const createGmailApiClient = (
    */
   const getDrafts = async (
     params: { maxResults?: number; pageToken?: string } = {}
-  ): Promise<DraftList> => {
+  ) => {
     const searchParams = new URLSearchParams();
 
     if (params.maxResults)
@@ -738,7 +729,7 @@ export const createGmailApiClient = (
   const getDraft = async (
     id: string,
     format: "full" | "minimal" | "raw" = "full"
-  ): Promise<Draft> => {
+  ) => {
     return fetchGmailApi<Draft>(`/drafts/${id}?format=${format}`);
   };
 
@@ -751,7 +742,7 @@ export const createGmailApiClient = (
     historyTypes?: string[];
     maxResults?: number;
     pageToken?: string;
-  }): Promise<HistoryList> => {
+  }) => {
     const searchParams = new URLSearchParams();
 
     searchParams.append("startHistoryId", params.startHistoryId);

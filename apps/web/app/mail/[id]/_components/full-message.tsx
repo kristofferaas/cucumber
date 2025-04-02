@@ -14,7 +14,11 @@ export async function FullMessage({
 }) {
   const gmail = createGmailApiClient({ accessToken: token });
 
-  const parts = messageToHtml(message);
+  const [parts, partsError] = messageToHtml(message);
+
+  if (partsError) {
+    return <div>Error fetching message</div>;
+  }
 
   const attachmentRequests = parts
     .filter((part) => part.contentType === "image/png")
@@ -24,12 +28,17 @@ export async function FullMessage({
       id: part.id,
     }));
 
-  const attachments = await gmail.batchGetAttachments(attachmentRequests);
+  const [attachments, error] =
+    await gmail.batchGetAttachments(attachmentRequests);
+
+  if (error) {
+    return <div>Error fetching attachments</div>;
+  }
 
   let html = parts.find((part) => part.contentType === "text/html")?.data || "";
 
   // Replace CID image references with data URIs
-  if (html && attachments) {
+  if (html) {
     // Process each attachment response and build the map
     attachments.forEach((attachment) => {
       if (attachment.body.data && attachment.id) {

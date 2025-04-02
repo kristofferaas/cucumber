@@ -8,14 +8,18 @@ export default async function MailDetailsPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const { token } = await getGoogleToken();
+  const [token, tokenError] = await getGoogleToken();
 
-  if (!token) {
+  if (tokenError) {
     return <div>No token found</div>;
   }
 
   const gmail = createGmailApiClient({ accessToken: token });
-  const message = await gmail.getMessage(id, "full");
+  const [message, messageError] = await gmail.getMessage(id, "full");
+
+  if (messageError) {
+    return <div>Error fetching message</div>;
+  }
 
   const subject = message.payload?.headers?.find(
     (header) => header.name === "Subject"
