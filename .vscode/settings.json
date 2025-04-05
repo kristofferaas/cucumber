@@ -1,8 +1,5 @@
 {
   "editor.defaultFormatter": "esbenp.prettier-vscode",
-  "eslint.workingDirectories": [
-    {
-      "mode": "auto"
-    }
-  ]
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "typescript.enablePromptUseWorkspaceTsdk": true,
 }
