@@ -61,8 +61,6 @@ export async function fetchMessages(
     throw new Error("No user found");
   }
 
-  await sleep(1000);
-
   const googleAccount = user.externalAccounts.find(
     (ea) => ea.provider === "google"
   );
