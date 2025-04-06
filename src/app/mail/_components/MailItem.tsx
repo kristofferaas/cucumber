@@ -7,14 +7,14 @@ import { formatDistanceToNow } from "date-fns";
 
 export function MailItem({ message }: { message: Message }) {
   const from = message.payload.headers.find(
-    (header) => header.name === "From"
+    (header) => header.name === "From",
   )?.value;
   const subject = message.payload.headers.find(
-    (header) => header.name === "Subject"
+    (header) => header.name === "Subject",
   )?.value;
 
   const date = message.payload.headers.find(
-    (header) => header.name === "Date"
+    (header) => header.name === "Date",
   )?.value;
 
   const isRead = !message.labelIds?.includes("UNREAD");
@@ -29,21 +29,21 @@ export function MailItem({ message }: { message: Message }) {
     : "";
 
   return (
-    <li className="flex flex-row items-center h-12 border border-border rounded overflow-hidden mx-4 hover:bg-accent/50 transition-colors has-[[data-state=checked]]:bg-primary/10">
+    <li className="border-border hover:bg-accent/50 has-[[data-state=checked]]:bg-primary/10 mx-4 flex h-12 flex-row items-center overflow-hidden rounded border transition-colors">
       <Checkbox className="mx-4" />
       <Link
         href={`/mail/${message.id}`}
-        className="flex-auto flex flex-row items-center gap-8 h-full px-4 cursor-default"
+        className="flex h-full flex-auto cursor-default flex-row items-center gap-8 px-4"
       >
         <div
           className={cn(
-            "font-sans text-base select-none font-medium",
-            isRead && "text-muted-foreground font-normal"
+            "font-sans text-base font-medium select-none",
+            isRead && "text-muted-foreground font-normal",
           )}
         >
           {subject}
         </div>
-        <div className="font-sans text-sm text-muted-foreground select-none">
+        <div className="text-muted-foreground font-sans text-sm select-none">
           {from}
         </div>
         <div className="flex-1" />
@@ -54,7 +54,7 @@ export function MailItem({ message }: { message: Message }) {
             </Badge>
           ))}
         </div>
-        <div className="font-sans text-sm text-muted-foreground select-none">
+        <div className="text-muted-foreground font-sans text-sm select-none">
           {formattedDate}
         </div>
       </Link>

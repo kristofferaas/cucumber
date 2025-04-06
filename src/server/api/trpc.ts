@@ -6,9 +6,10 @@
  * TL;DR - This is where all the tRPC server stuff is created and plugged in. The pieces you will
  * need to use are documented accordingly near the end.
  */
-import { initTRPC } from "@trpc/server";
+import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
 import { ZodError } from "zod";
+import { getGoogleToken } from "../gmail/get-google-token";
 
 /**
  * 1. CONTEXT
@@ -94,6 +95,17 @@ const timingMiddleware = t.middleware(async ({ next, path }) => {
 });
 
 /**
+ * Authentication middleware
+ */
+const authMiddleware = t.middleware(async ({ next }) => {
+  const [googleToken, tokenError] = await getGoogleToken();
+  if (tokenError) {
+    throw new TRPCError({ code: "UNAUTHORIZED" });
+  }
+  return next({ ctx: { googleToken } });
+});
+
+/**
  * Public (unauthenticated) procedure
  *
  * This is the base piece you use to build new queries and mutations on your tRPC API. It does not
@@ -101,3 +113,10 @@ const timingMiddleware = t.middleware(async ({ next, path }) => {
  * are logged in.
  */
 export const publicProcedure = t.procedure.use(timingMiddleware);
+
+/**
+ * Protected (authenticated) procedure
+ */
+export const protectedProcedure = t.procedure
+  .use(timingMiddleware)
+  .use(authMiddleware);

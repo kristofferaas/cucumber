@@ -1,40 +1,29 @@
-import { createGmailApiClient } from "@/lib/gmail";
-import { getGoogleToken } from "../actions";
-import { FullMessage } from "./_components/full-message";
+"use client";
 
-export default async function MailDetailsPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
-  const { id } = await params;
-  const [token, tokenError] = await getGoogleToken();
+import { useParams } from "next/navigation";
+import createDynamic from "next/dynamic";
 
-  if (tokenError) {
-    return <div>No token found</div>;
+const Message = createDynamic(
+  async () => {
+    const { Message } = await import("@/components/messages/message");
+    return Message;
+  },
+  {
+    ssr: false,
+  },
+);
+
+export default function MailDetailsPage() {
+  const { id } = useParams();
+
+  if (!id || typeof id !== "string") {
+    return <div>No id</div>;
   }
-
-  const gmail = createGmailApiClient({ accessToken: token });
-  const [message, messageError] = await gmail.getMessage(id, "full");
-
-  if (messageError) {
-    return <div>Error fetching message</div>;
-  }
-
-  const subject = message.payload?.headers?.find(
-    (header) => header.name === "Subject"
-  )?.value;
-
-  const from = message.payload?.headers?.find(
-    (header) => header.name === "From"
-  )?.value;
 
   return (
-    <div className="container mx-auto py-6 max-w-4xl">
-      <h1 className="text-2xl font-bold py-6">{subject}</h1>
-      <div className="text-sm text-muted-foreground">{from}</div>
+    <div className="container mx-auto max-w-4xl py-6">
       <div className="py-6">
-        <FullMessage message={message} id={id} token={token} />
+        <Message messageId={id} />
       </div>
     </div>
   );

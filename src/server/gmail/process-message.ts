@@ -1,4 +1,4 @@
-import type { MessagePart } from "@/lib/gmail/schemas";
+import type { MessagePart } from "@/server/gmail/schemas";
 import { getMimeType } from "./get-mime-type";
 import { getContentDetails } from "./parse-headers";
 import { decodeData } from "./decode-data";

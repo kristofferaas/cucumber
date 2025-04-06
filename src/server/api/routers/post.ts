@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { createTRPCRouter, publicProcedure } from "@/server/api/trpc";
+import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 
 // Mocked DB
 interface Post {
@@ -15,7 +15,7 @@ const posts: Post[] = [
 ];
 
 export const postRouter = createTRPCRouter({
-  hello: publicProcedure
+  hello: protectedProcedure
     .input(z.object({ text: z.string() }))
     .query(({ input }) => {
       return {
@@ -23,7 +23,7 @@ export const postRouter = createTRPCRouter({
       };
     }),
 
-  create: publicProcedure
+  create: protectedProcedure
     .input(z.object({ name: z.string().min(1) }))
     .mutation(async ({ input }) => {
       const post: Post = {
@@ -34,7 +34,7 @@ export const postRouter = createTRPCRouter({
       return post;
     }),
 
-  getLatest: publicProcedure.query(() => {
+  getLatest: protectedProcedure.query(() => {
     return posts.at(-1) ?? null;
   }),
 });

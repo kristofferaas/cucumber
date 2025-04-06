@@ -1,4 +1,4 @@
-import type { Message } from "@/lib/gmail/schemas";
+import type { Message } from "@/server/gmail/schemas";
 import { err } from "@/lib/try-catch";
 import { processMessagePart } from "./process-message";
 

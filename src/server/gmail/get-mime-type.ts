@@ -1,4 +1,4 @@
-import { type MessagePart } from "@/lib/gmail/schemas";
+import { type MessagePart } from "@/server/gmail/schemas";
 import { parse } from "@/lib/try-catch/std";
 import { z } from "zod";
 

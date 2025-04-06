@@ -1,4 +1,4 @@
-import { type Err, err, type Ok, ok, wrap } from "../try-catch";
+import { type Err, err, type Ok, ok, wrap } from "@/lib/try-catch";
 import type {
   Draft,
   DraftList,
