@@ -138,14 +138,14 @@ export const HistorySchema = z.object({
     .array(
       z.object({
         message: MessageSchema,
-      })
+      }),
     )
     .optional(),
   messagesDeleted: z
     .array(
       z.object({
         message: MessageSchema,
-      })
+      }),
     )
     .optional(),
   labelsAdded: z
@@ -153,7 +153,7 @@ export const HistorySchema = z.object({
       z.object({
         message: MessageSchema,
         labelIds: z.array(z.string()),
-      })
+      }),
     )
     .optional(),
   labelsRemoved: z
@@ -161,7 +161,7 @@ export const HistorySchema = z.object({
       z.object({
         message: MessageSchema,
         labelIds: z.array(z.string()),
-      })
+      }),
     )
     .optional(),
 });
@@ -175,3 +175,27 @@ export const HistoryListSchema = z.object({
 });
 
 export type HistoryList = z.infer<typeof HistoryListSchema>;
+
+export const InfiniteMessageSchema = z
+  .object({
+    historyId: z.string(),
+    id: z.string(),
+    threadId: z.string(),
+    snippet: z.string(),
+    labelIds: z.array(z.string()).optional(),
+    payload: z
+      .object({
+        headers: z.array(
+          z.object({
+            name: z.string(),
+            value: z.string(),
+          }),
+        ),
+      })
+      .passthrough(),
+    internalDate: z.string(),
+    sizeEstimate: z.number(),
+  })
+  .passthrough();
+
+export type InfiniteMessage = z.infer<typeof InfiniteMessageSchema>;

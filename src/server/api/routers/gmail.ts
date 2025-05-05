@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { Buffer } from "buffer"; // Need Buffer for base64 operations
 
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 import { createGmailApiClient } from "@/server/gmail/api";
@@ -78,6 +79,32 @@ export const gmailRouter = createTRPCRouter({
       }
       return {
         html,
+      };
+    }),
+
+  infiniteMessages: protectedProcedure
+    .input(
+      z.object({
+        cursor: z.string().optional(),
+      }),
+    )
+    .query(async ({ input, ctx }) => {
+      const gmail = createGmailApiClient({ accessToken: ctx.googleToken });
+
+      const [result, error] = await gmail.fetchInfiniteMessages({
+        cursor: input.cursor,
+      });
+
+      if (error) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: error.message,
+        });
+      }
+
+      return {
+        messages: result.messages,
+        nextCursor: result.nextCursor,
       };
     }),
 });

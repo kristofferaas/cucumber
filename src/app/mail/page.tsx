@@ -1,19 +1,23 @@
-import { getGoogleToken } from "./actions";
-import { MailList } from "./_components/MailList";
-import { UserGuard } from "./_components/UserGuard";
+"use client";
+
+import dynamic from "next/dynamic";
 import { InboxBanner } from "./_components/layout/inbox-banner";
 
-export default async function MailPage() {
-  const [token, tokenError] = await getGoogleToken();
+const MailList = dynamic(
+  async () => {
+    const { MailList } = await import("./_components/MailList");
+    return MailList;
+  },
+  {
+    ssr: false,
+  },
+);
 
-  if (tokenError) {
-    return <div>No token found</div>;
-  }
-
+export default function MailPage() {
   return (
-    <UserGuard>
+    <>
       <InboxBanner />
-      <MailList token={token} />
-    </UserGuard>
+      <MailList />
+    </>
   );
 }

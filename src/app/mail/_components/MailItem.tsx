@@ -1,11 +1,11 @@
 import { Checkbox } from "@/components/ui/checkbox";
-import { type Message } from "./fetch-messages";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { formatDistanceToNow } from "date-fns";
+import type { InfiniteMessage } from "@/server/gmail/schemas";
 
-export function MailItem({ message }: { message: Message }) {
+export function MailItem({ message }: { message: InfiniteMessage }) {
   const from = message.payload.headers.find(
     (header) => header.name === "From",
   )?.value;

@@ -3,6 +3,7 @@ import type {
   Draft,
   DraftList,
   HistoryList,
+  InfiniteMessage,
   Label,
   LabelList,
   Message,
@@ -15,7 +16,9 @@ import {
   MessageSchema,
   MessageAttachmentSchema,
   ThreadSchema,
+  InfiniteMessageSchema,
 } from "./schemas";
+import { z } from "zod";
 
 // Constants
 export const GMAIL_API_BASE_URL =
@@ -758,6 +761,245 @@ export const createGmailApiClient = (options: GmailApiClientOptions) => {
     return fetchGmailApi<HistoryList>(`/history${queryString}`);
   };
 
+  /**
+   * Fetches messages with pagination support and detailed message data
+   *
+   * @param params.cursor Optional page token for pagination
+   * @returns Object containing messages array and next cursor for pagination
+   */
+  const fetchInfiniteMessages = async (params: { cursor?: string }) => {
+    const { cursor } = params;
+
+    // Gmail API has tight rate limits - keep batch size very small
+    const BATCH_SIZE = 20;
+
+    // Build request URL with pagination support
+    let listUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=${BATCH_SIZE}`;
+    if (cursor) {
+      listUrl += `&pageToken=${cursor}`;
+    }
+
+    // Fetch the message list
+    const [listResponse, listError] = await wrap(
+      fetch(listUrl, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      }),
+    );
+
+    if (listError) {
+      return err(listError);
+    }
+
+    if (listResponse.status === 401) {
+      return err(
+        new Error("Gmail API access unauthorized. Re-authentication required."),
+      );
+    }
+
+    // Parse the message list response
+    const [listData, listDataError] = await wrap(listResponse.json());
+    if (listDataError) {
+      return err(listDataError);
+    }
+
+    const messageListSchema = z.object({
+      messages: z
+        .object({
+          id: z.string(),
+          threadId: z.string(),
+        })
+        .array()
+        .optional(),
+      nextPageToken: z.string().optional(),
+      resultSizeEstimate: z.number().optional(),
+    });
+
+    const parsedListData = messageListSchema.safeParse(listData);
+    if (!parsedListData.success) {
+      return err(
+        new Error("Failed to parse message list response from Gmail."),
+      );
+    }
+
+    if (
+      !parsedListData.data.messages ||
+      parsedListData.data.messages.length === 0
+    ) {
+      return ok({
+        messages: [],
+        nextCursor: parsedListData.data.nextPageToken,
+      });
+    }
+
+    const messagesToFetch = parsedListData.data.messages.slice(0, BATCH_SIZE);
+
+    // Create a unique boundary string
+    const boundary = `batch_boundary_${Math.random().toString(36).substring(2, 15)}`;
+
+    // Prepare for batch request
+    const batchRequests = messagesToFetch.map((message, index) => {
+      const messageId = message.id;
+      // Request essential fields only to reduce payload size & improve performance
+      const requestUrl = `/gmail/v1/users/me/messages/${messageId}?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=Date`;
+      return [
+        `--${boundary}`,
+        `Content-Type: application/http`,
+        `Content-ID: <item${index}>`,
+        "",
+        `GET ${requestUrl}`,
+        "",
+        "",
+      ].join("\r\n");
+    });
+
+    const batchBody = [batchRequests.join(""), `--${boundary}--`, ""].join(
+      "\r\n",
+    );
+
+    // Send the batch request
+    const [batchResponse, batchError] = await wrap(
+      fetch(`https://www.googleapis.com/batch/gmail/v1`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": `multipart/mixed; boundary=${boundary}`,
+        },
+        body: batchBody,
+      }),
+    );
+
+    if (batchError) {
+      return err(batchError);
+    }
+
+    if (batchResponse.status === 401) {
+      return err(
+        new Error("Gmail API access unauthorized during batch request."),
+      );
+    }
+
+    // Handle non-OK responses generally
+    if (!batchResponse.ok) {
+      const [errorText, errorTextError] = await wrap(batchResponse.text());
+      if (!errorTextError) {
+        console.error(
+          `Gmail API batch error: ${batchResponse.status} ${batchResponse.statusText}`,
+          errorText,
+        );
+      }
+
+      // Allow parsing logic to handle individual errors if possible,
+      // but throw if the overall batch request failed significantly.
+      if (batchResponse.status >= 500 || batchResponse.status === 403) {
+        return err(
+          new Error(`Gmail batch request failed: ${batchResponse.statusText}`),
+        );
+      }
+    }
+
+    // Process the multipart response
+    const [responseText, responseTextError] = await wrap(batchResponse.text());
+    if (responseTextError) {
+      return err(responseTextError);
+    }
+
+    // Extract the response boundary from the Content-Type header
+    let responseBoundary = boundary; // Default, but Gmail often uses its own
+    const contentTypeHeader = batchResponse.headers.get("Content-Type");
+    if (contentTypeHeader) {
+      const boundaryMatch = /boundary=([^;]+)/i.exec(contentTypeHeader);
+      if (boundaryMatch?.[1]) {
+        responseBoundary = boundaryMatch[1].trim();
+        // Remove quotes if present
+        if (
+          responseBoundary.startsWith('"') &&
+          responseBoundary.endsWith('"')
+        ) {
+          responseBoundary = responseBoundary.slice(1, -1);
+        }
+      }
+    }
+
+    // Parse multipart response
+    const parts = parseMultipartMixed(responseText, responseBoundary);
+
+    const messages: InfiniteMessage[] = [];
+    parts.forEach((part) => {
+      if (!part.trim()) return; // Skip empty parts which indicate errors
+
+      try {
+        // Parse JSON with explicit type assertion
+        const jsonData = JSON.parse(part.trim()) as Record<string, unknown>;
+        const parsedMessage = InfiniteMessageSchema.safeParse(jsonData);
+        if (parsedMessage.success) {
+          messages.push(parsedMessage.data);
+        } else {
+          console.warn(
+            "Failed to parse individual message data:",
+            parsedMessage.error,
+          );
+        }
+      } catch (error) {
+        console.error(
+          "Failed to parse JSON from batch response part:",
+          part,
+          error,
+        );
+      }
+    });
+
+    // Return the messages with the next page token
+    return ok({
+      messages,
+      nextCursor: parsedListData.data.nextPageToken,
+    });
+  };
+
+  // Helper function to parse multipart mixed responses
+  const parseMultipartMixed = (text: string, boundary: string): string[] => {
+    // Split by boundary
+    const boundaryParts = text.split(`--${boundary}`);
+
+    // Ignore the first (empty) and last (closing) parts
+    const responseParts = boundaryParts.slice(1, -1);
+
+    return responseParts.map((part) => {
+      try {
+        // Find where headers end and body begins
+        const headerBodySeparator = part.indexOf("\r\n\r\n");
+        if (headerBodySeparator === -1) return "";
+
+        const body = part.substring(headerBodySeparator + 4);
+
+        // Find the HTTP response status line and headers
+        const httpHeadersEnd = body.indexOf("\r\n\r\n");
+        if (httpHeadersEnd === -1) return "";
+
+        // Get the actual JSON response body
+        const responseBody = body.substring(httpHeadersEnd + 4);
+
+        // Check HTTP status code
+        const statusLine = body.substring(0, body.indexOf("\r\n"));
+        const statusMatch = /HTTP\/[\d.]+\s+(\d{3})/.exec(statusLine);
+        const statusCode = statusMatch?.[1] ? parseInt(statusMatch[1], 10) : 0;
+
+        // If not a successful status code, log error and return empty
+        if (statusCode < 200 || statusCode >= 300) {
+          console.error(`Error in batch response: ${statusLine}`);
+          console.error(responseBody);
+          return "";
+        }
+
+        return responseBody;
+      } catch (error) {
+        console.error("Error parsing multipart response part", error);
+        return "";
+      }
+    });
+  };
+
   return {
     getMessages,
     getMessage,
@@ -776,5 +1018,6 @@ export const createGmailApiClient = (options: GmailApiClientOptions) => {
     batchModifyMessages,
     batchTrashMessages,
     batchUntrashMessages,
+    fetchInfiniteMessages,
   };
 };
