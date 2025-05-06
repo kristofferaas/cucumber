@@ -8,14 +8,10 @@ import { api } from "@/trpc/react";
 export function MailList() {
   const parentRef = useRef<HTMLDivElement>(null);
 
-  const {
+  const [
     data,
-    fetchNextPage,
-    hasNextPage,
-    isFetchingNextPage,
-    status,
-    error,
-  } = api.gmail.infiniteMessages.useInfiniteQuery(
+    { fetchNextPage, hasNextPage, isFetchingNextPage, status, error },
+  ] = api.gmail.infiniteMessages.useSuspenseInfiniteQuery(
     {},
     {
       getNextPageParam: (lastPage) => lastPage.nextCursor,
@@ -34,7 +30,7 @@ export function MailList() {
     gap: 10,
     paddingStart: 10,
     paddingEnd: 10,
-    overscan: 5,
+    overscan: 8,
   });
 
   const virtualItems = rowVirtualizer.getVirtualItems();
@@ -57,10 +53,6 @@ export function MailList() {
     isFetchingNextPage,
     virtualItems,
   ]);
-
-  if (status === "pending") {
-    return <div className="p-4 text-center">Loading...</div>;
-  }
 
   if (status === "error") {
     const errorMessage = error?.message ?? "Error loading messages";

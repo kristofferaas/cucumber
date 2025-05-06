@@ -1,17 +1,8 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import createDynamic from "next/dynamic";
-
-const Message = createDynamic(
-  async () => {
-    const { Message } = await import("@/components/messages/message");
-    return Message;
-  },
-  {
-    ssr: false,
-  },
-);
+import { ClientOnly } from "@/components/app-layout/client-only";
+import { Message } from "@/components/messages/message";
 
 export default function MailDetailsPage() {
   const { id } = useParams();
@@ -23,7 +14,9 @@ export default function MailDetailsPage() {
   return (
     <div className="container mx-auto max-w-4xl py-6">
       <div className="py-6">
-        <Message messageId={id} />
+        <ClientOnly fallback={<div>Loading...</div>}>
+          <Message messageId={id} />
+        </ClientOnly>
       </div>
     </div>
   );

@@ -1,9 +1,10 @@
 import { Checkbox } from "@/components/ui/checkbox";
-import Link from "next/link";
+import { Link } from "@/components/ui/link";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { formatDistanceToNow } from "date-fns";
 import type { InfiniteMessage } from "@/server/gmail/schemas";
+import { api } from "@/trpc/react";
 
 export function MailItem({ message }: { message: InfiniteMessage }) {
   const from = message.payload.headers.find(
@@ -28,8 +29,16 @@ export function MailItem({ message }: { message: InfiniteMessage }) {
     ? formatDistanceToNow(new Date(date), { addSuffix: true })
     : "";
 
+  const utils = api.useUtils();
+  const prefetchMessage = () => {
+    void utils.gmail.getMessage.prefetch({ messageId: message.id });
+  };
+
   return (
-    <li className="border-border hover:bg-accent/50 has-[[data-state=checked]]:bg-primary/10 mx-4 flex h-12 flex-row items-center overflow-hidden rounded border transition-colors">
+    <li
+      className="border-border hover:bg-accent/50 has-[[data-state=checked]]:bg-primary/10 mx-4 flex h-12 flex-row items-center overflow-hidden rounded border transition-colors"
+      onMouseOver={prefetchMessage}
+    >
       <Checkbox className="mx-4" />
       <Link
         href={`/mail/${message.id}`}
