@@ -6,7 +6,7 @@ import { type Err, err, type Ok, ok } from "@/lib/try-catch";
 
 type ProcessedPart = {
   id: string;
-  contentType: "text/plain" | "text/html" | "image/png";
+  contentType: "text/plain" | "text/html" | "image/png" | "application/pdf";
   data: string;
 };
 
@@ -25,6 +25,9 @@ export function processMessagePart(
     case "multipart/related": {
       return processMultipartRelated(payload);
     }
+    case "multipart/mixed": {
+      return processMultipartMixed(payload);
+    }
     case "text/plain": {
       const [data, error] = processTextPlain(payload);
       if (error) {
@@ -40,7 +43,28 @@ export function processMessagePart(
       return ok([data]);
     }
     case "image/png": {
-      const [data, error] = processImagePng(payload);
+      const [data, error] = processImage(payload);
+      if (error) {
+        return err(error);
+      }
+      return ok([data]);
+    }
+    case "image/jpeg": {
+      const [data, error] = processImage(payload);
+      if (error) {
+        return err(error);
+      }
+      return ok([data]);
+    }
+    case "application/pdf": {
+      const [data, error] = processAttachment(payload);
+      if (error) {
+        return err(error);
+      }
+      return ok([data]);
+    }
+    case "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
+      const [data, error] = processAttachment(payload);
       if (error) {
         return err(error);
       }
@@ -50,6 +74,32 @@ export function processMessagePart(
       return err(new Error(`Unsupported mime type`));
     }
   }
+}
+
+function processAttachment(
+  payload: MessagePart,
+): Ok<ProcessedPart> | Err<Error> {
+  const { body, partId } = payload;
+
+  if (!partId) {
+    return err(new Error("No partId found in application/pdf"));
+  }
+
+  if (!body) {
+    return err(new Error("No body found in application/pdf"));
+  }
+
+  const attachmentId = body.attachmentId;
+
+  if (!attachmentId) {
+    return err(new Error("No attachmentId found in application/pdf"));
+  }
+
+  return ok({
+    id: partId,
+    contentType: "application/pdf",
+    data: attachmentId,
+  });
 }
 
 function processMultipartAlternative(
@@ -154,6 +204,28 @@ function processMultipartRelated(
   return ok(processedParts);
 }
 
+function processMultipartMixed(
+  payload: MessagePart,
+): Ok<ProcessedPart[]> | Err<Error> {
+  const { parts } = payload;
+
+  if (!parts) {
+    return err(new Error("No parts found in multipart/mixed"));
+  }
+
+  const processedParts: ProcessedPart[] = [];
+
+  for (const part of parts) {
+    const [data, error] = processMessagePart(part);
+    if (error) {
+      return err(error);
+    }
+    processedParts.push(...data);
+  }
+
+  return ok(processedParts);
+}
+
 function processTextHtml(payload: MessagePart): Ok<ProcessedPart> | Err<Error> {
   const { mimeType, body, headers, partId } = payload;
 
@@ -188,15 +260,11 @@ function processTextHtml(payload: MessagePart): Ok<ProcessedPart> | Err<Error> {
   });
 }
 
-function processImagePng(payload: MessagePart): Ok<ProcessedPart> | Err<Error> {
-  const { mimeType, body, headers, partId } = payload;
+function processImage(payload: MessagePart): Ok<ProcessedPart> | Err<Error> {
+  const { body, headers, partId } = payload;
 
   if (!partId) {
     return err(new Error("No partId found in image/png"));
-  }
-
-  if (mimeType !== "image/png") {
-    return err(new Error("Mime type is not image/png"));
   }
 
   const attachmentId = body?.attachmentId;

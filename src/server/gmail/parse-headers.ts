@@ -2,7 +2,12 @@ import { err } from "@/lib/try-catch";
 import { parse } from "@/lib/try-catch/std";
 import { z } from "zod";
 
-const charsetSchema = z.enum(["utf-8", "iso-8859-1"]);
+const charsetSchema = z.enum([
+  "utf-8",
+  "iso-8859-1",
+  "windows-1252",
+  "us-ascii",
+]);
 export type Charset = z.infer<typeof charsetSchema>;
 
 const contentTypeSchema = z.enum([

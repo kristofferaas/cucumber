@@ -13,8 +13,6 @@ export async function getGoogleToken() {
     return err(clerkError);
   }
 
-  console.log(user);
-
   const [tokenResponse, tokenError] = await wrap(
     client.users.getUserOauthAccessToken(user.userId ?? "", "google"),
   );

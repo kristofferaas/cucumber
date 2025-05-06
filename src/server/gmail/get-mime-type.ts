@@ -9,8 +9,13 @@ const mimeTypeSchema = z.enum([
   // multipart
   "multipart/alternative",
   "multipart/related",
+  "multipart/mixed",
   // image
   "image/png",
+  "image/jpeg",
+  // application
+  "application/pdf",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 ]);
 
 export type MimeType = z.infer<typeof mimeTypeSchema>;
