@@ -1,9 +1,12 @@
 "use client";
 
-import { useVirtualizer } from "@tanstack/react-virtual";
+import { useVirtualizer, type VirtualItem } from "@tanstack/react-virtual";
 import { useRef, useEffect } from "react";
 import { MailItem } from "./MailItem";
 import { api } from "@/trpc/react";
+
+let savedMeasurementsCache: VirtualItem[] = [];
+let savedOffset = 0;
 
 export function MailList() {
   const parentRef = useRef<HTMLDivElement>(null);
@@ -31,6 +34,14 @@ export function MailList() {
     paddingStart: 10,
     paddingEnd: 10,
     overscan: 8,
+    initialOffset: savedOffset,
+    initialMeasurementsCache: savedMeasurementsCache,
+    onChange: (virtualizer) => {
+      if (!virtualizer.isScrolling) {
+        savedMeasurementsCache = virtualizer.measurementsCache;
+        savedOffset = virtualizer.scrollOffset ?? 0;
+      }
+    },
   });
 
   const virtualItems = rowVirtualizer.getVirtualItems();
